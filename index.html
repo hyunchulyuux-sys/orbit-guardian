@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="저궤도 우주 데브리 충돌 회피 관제 시뮬레이터 — 포트폴리오 데모">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛰️</text></svg>">
+<style>html,body{margin:0;background:#05070d}</style>
+</head>
+<body>
+<title>ORBIT GUARDIAN — 충돌 회피 관제 시뮬레이터</title>
+<style>
+  :root{
+    --void:#05070d; --panel:#0a111b; --panel-2:#0c1522; --edge:#16232f;
+    --grid:#122130; --ink:#c7d6e6; --ink-dim:#6d8298; --ink-faint:#3f5266;
+    --cyan:#37e0d0; --cyan-deep:#1f9fb0; --amber:#f2a93b; --red:#ff4d5e;
+    --go:#41e08a; --accent:#37e0d0;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--void);color:var(--ink);
+    font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+  #stage{position:fixed;inset:0;overflow:hidden}
+  canvas#scope{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+  /* ---- mission-control overlay chrome ---- */
+  .hud{position:absolute;pointer-events:none;font-family:var(--mono)}
+  .label{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim)}
+  .val{font-variant-numeric:tabular-nums}
+
+  /* top bar */
+  .topbar{top:0;left:0;right:0;display:flex;align-items:center;gap:14px;
+    padding:12px 16px;border-bottom:1px solid var(--edge);
+    background:linear-gradient(180deg,rgba(6,10,17,.82),rgba(6,10,17,0));backdrop-filter:blur(2px)}
+  .brand{display:flex;align-items:baseline;gap:9px}
+  .brand b{font-family:var(--sans);font-weight:800;letter-spacing:.14em;font-size:13px;color:var(--ink)}
+  .brand span{font-size:9.5px;letter-spacing:.26em;color:var(--cyan)}
+  .clock{margin-left:auto;font-size:12px;letter-spacing:.12em;color:var(--ink)}
+  .status{display:flex;align-items:center;gap:7px;font-size:10.5px;letter-spacing:.16em;
+    padding:5px 10px;border:1px solid var(--edge);border-radius:2px;background:rgba(12,21,34,.6)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--go);box-shadow:0 0 8px var(--go)}
+  .status.warn .dot{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+  .status.crit .dot{background:var(--red);box-shadow:0 0 9px var(--red)}
+  .status.crit{border-color:rgba(255,77,94,.5);color:#ffd7db}
+
+  /* left telemetry */
+  .telemetry{top:64px;left:16px;width:216px;display:flex;flex-direction:column;gap:9px}
+  .card{border:1px solid var(--edge);background:linear-gradient(180deg,rgba(12,21,34,.72),rgba(10,17,27,.72));
+    border-radius:3px;padding:11px 12px}
+  .card .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .readout{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0}
+  .readout .k{font-size:10px;letter-spacing:.13em;color:var(--ink-dim);text-transform:uppercase}
+  .readout .v{font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .readout .v small{font-size:9.5px;color:var(--ink-faint);margin-left:3px;letter-spacing:.05em}
+  .gauge{height:7px;border:1px solid var(--edge);border-radius:2px;overflow:hidden;background:#0a1017;margin-top:5px}
+  .gauge>i{display:block;height:100%;transition:width .12s linear}
+  .g-fuel>i{background:linear-gradient(90deg,var(--cyan-deep),var(--cyan))}
+  .g-hull>i{background:linear-gradient(90deg,#2f9f6a,var(--go))}
+  .gauge.low>i{background:linear-gradient(90deg,#b0421f,var(--amber))!important}
+  .gauge.crit>i{background:linear-gradient(90deg,#8a1f2a,var(--red))!important}
+
+  /* right mission log */
+  .side{top:64px;right:16px;width:224px;display:flex;flex-direction:column;gap:9px}
+  .log{height:150px;overflow:hidden;display:flex;flex-direction:column-reverse;gap:4px}
+  .log .line{font-size:11px;line-height:1.35;color:var(--ink-dim);border-left:2px solid var(--edge);padding-left:7px}
+  .log .line b{color:var(--cyan);font-weight:600}
+  .log .line.warn{color:#f4c987;border-color:var(--amber)}
+  .log .line.crit{color:#ffb3bb;border-color:var(--red)}
+  .log .line.go{color:#9fe9c2;border-color:var(--go)}
+  .objlist .row{display:flex;justify-content:space-between;font-size:10.5px;padding:3px 0;color:var(--ink-dim);font-variant-numeric:tabular-nums}
+  .objlist .row .tag{color:var(--amber)}
+  .objlist .row .tag.crit{color:var(--red)}
+
+  /* score chip */
+  .score{top:64px;left:50%;transform:translateX(-50%);text-align:center}
+  .score .n{font-size:30px;font-weight:800;font-family:var(--sans);letter-spacing:.02em;color:var(--ink);
+    font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(55,224,208,.25)}
+  .score .l{font-size:9.5px;letter-spacing:.32em;color:var(--ink-dim);text-transform:uppercase;margin-top:2px}
+
+  /* controls */
+  .controls{bottom:16px;left:50%;transform:translateX(-50%);pointer-events:auto;
+    display:flex;flex-direction:column;align-items:center;gap:6px}
+  .hint{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase}
+  .dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,44px);gap:6px}
+  .dpad button{font-family:var(--mono);font-size:16px;color:var(--ink);background:rgba(12,21,34,.8);
+    border:1px solid var(--edge);border-radius:3px;cursor:pointer;transition:.08s;-webkit-user-select:none;user-select:none;touch-action:none}
+  .dpad button:hover{border-color:var(--cyan-deep);color:var(--cyan)}
+  .dpad button:active,.dpad button.on{background:rgba(55,224,208,.16);border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 12px rgba(55,224,208,.2)}
+  .dpad .up{grid-column:2;grid-row:1}.dpad .lt{grid-column:1;grid-row:2}
+  .dpad .dn{grid-column:2;grid-row:2}.dpad .rt{grid-column:3;grid-row:2}
+
+  /* full-screen panels */
+  .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(120% 90% at 50% 30%,rgba(9,15,24,.86),rgba(4,6,11,.96));
+    pointer-events:auto;z-index:20;padding:24px}
+  .screen.hide{display:none}
+  .dialog{width:min(680px,94vw);border:1px solid var(--edge);border-radius:6px;
+    background:linear-gradient(180deg,rgba(11,18,28,.96),rgba(8,13,21,.98));
+    box-shadow:0 30px 90px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.03);overflow:hidden}
+  .dialog .top{padding:20px 26px 0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .dialog h1{font-family:var(--sans);font-weight:800;letter-spacing:.06em;font-size:24px;margin:0;color:var(--ink)}
+  .dialog h1 em{font-style:normal;color:var(--cyan)}
+  .kicker{font-family:var(--mono);font-size:10px;letter-spacing:.34em;color:var(--cyan);text-transform:uppercase}
+  .brief{padding:12px 26px 4px;color:var(--ink-dim);font-size:13.5px;line-height:1.6;max-width:60ch}
+  .brief b{color:var(--ink);font-weight:600}
+  .fleet{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px 26px 8px}
+  .ship{text-align:left;border:1px solid var(--edge);border-radius:4px;background:rgba(9,15,24,.7);
+    padding:13px;cursor:pointer;transition:.12s;font-family:var(--mono);color:var(--ink-dim)}
+  .ship:hover{border-color:var(--cyan-deep);transform:translateY(-2px)}
+  .ship.sel{border-color:var(--cyan);background:rgba(55,224,208,.08);box-shadow:0 0 0 1px var(--cyan) inset,0 0 22px rgba(55,224,208,.12)}
+  .ship .nm{font-family:var(--sans);font-weight:700;font-size:14px;color:var(--ink);letter-spacing:.02em;display:flex;align-items:center;gap:7px}
+  .ship .cls{font-size:9.5px;letter-spacing:.2em;color:var(--cyan);text-transform:uppercase;margin:3px 0 9px}
+  .stat{display:flex;align-items:center;gap:7px;font-size:10px;margin:4px 0;text-transform:uppercase;letter-spacing:.08em}
+  .stat .bar{flex:1;height:4px;background:#0a1017;border:1px solid var(--edge);border-radius:2px;overflow:hidden}
+  .stat .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan-deep),var(--cyan))}
+  .actions{display:flex;align-items:center;gap:14px;padding:8px 26px 24px;flex-wrap:wrap}
+  .go-btn{font-family:var(--mono);font-size:13px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--void);background:var(--cyan);border:none;border-radius:3px;padding:13px 26px;cursor:pointer;
+    font-weight:700;transition:.12s;box-shadow:0 0 22px rgba(55,224,208,.3)}
+  .go-btn:hover{background:#5cebdc;box-shadow:0 0 30px rgba(55,224,208,.5)}
+  .go-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+  .keys{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.08em}
+  .keys kbd{border:1px solid var(--edge);border-radius:3px;padding:1px 6px;color:var(--ink-dim);background:#0a1017;margin:0 1px}
+
+  /* mission report grid */
+  .report{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px 26px 6px}
+  .report .cell{border:1px solid var(--edge);border-radius:4px;padding:12px 14px;background:rgba(9,15,24,.6)}
+  .report .cell .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--ink-dim);text-transform:uppercase}
+  .report .cell .v{font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);margin-top:4px;font-variant-numeric:tabular-nums}
+  .report .cell .v em{font-style:normal;font-size:12px;color:var(--ink-faint);font-weight:500}
+  .verdict{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--amber);padding:2px 26px 0}
+
+  .scanline{position:absolute;inset:0;pointer-events:none;z-index:15;mix-blend-mode:overlay;opacity:.5;
+    background:repeating-linear-gradient(0deg,rgba(255,255,255,.03) 0 1px,transparent 1px 3px)}
+  .credit{position:absolute;bottom:12px;left:16px;font-family:var(--mono);font-size:9px;letter-spacing:.16em;
+    color:var(--ink-faint);text-transform:uppercase;pointer-events:none}
+
+  @media (max-width:760px){
+    .telemetry{display:none}.side{display:none}.score{top:58px}
+    .topbar{padding:9px 12px}.brand span{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){.scanline{display:none}}
+</style>
+
+<div id="stage">
+  <canvas id="scope"></canvas>
+  <div class="scanline" aria-hidden="true"></div>
+
+  <!-- TOP BAR -->
+  <div class="hud topbar">
+    <div class="brand"><b>ORBIT&nbsp;GUARDIAN</b><span>LEO CONJUNCTION OPS</span></div>
+    <div class="status" id="statusPill"><i class="dot"></i><span id="statusTxt">NOMINAL</span></div>
+    <div class="clock">MET <span class="val" id="clock">00:00</span></div>
+  </div>
+
+  <!-- SCORE -->
+  <div class="hud score">
+    <div class="n val" id="score">0</div>
+    <div class="l">Mission Score</div>
+  </div>
+
+  <!-- LEFT TELEMETRY -->
+  <div class="hud telemetry">
+    <div class="card">
+      <div class="hd"><span class="label">Vehicle Telemetry</span></div>
+      <div class="readout"><span class="k">Altitude</span><span class="v val"><span id="alt">0</span><small>KM</small></span></div>
+      <div class="readout"><span class="k">Velocity</span><span class="v val"><span id="vel">0.0</span><small>KM/S</small></span></div>
+      <div class="readout"><span class="k">Δv Reserve</span><span class="v val"><span id="fuelPct">100</span><small>%</small></span></div>
+      <div class="gauge g-fuel" id="fuelGauge"><i style="width:100%"></i></div>
+      <div class="readout" style="margin-top:6px"><span class="k">Hull Integrity</span><span class="v val"><span id="hullPct">100</span><small>%</small></span></div>
+      <div class="gauge g-hull" id="hullGauge"><i style="width:100%"></i></div>
+    </div>
+  </div>
+
+  <!-- RIGHT MISSION LOG -->
+  <div class="hud side">
+    <div class="card">
+      <div class="hd"><span class="label">Tracked Objects</span><span class="label" id="objCount" style="color:var(--amber)">0</span></div>
+      <div class="objlist" id="objlist"></div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="label">Mission Log</span></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="hud controls">
+    <div class="hint">Thrust to hold orbit &amp; evade</div>
+    <div class="dpad" id="dpad">
+      <button class="up" data-dir="up" aria-label="thrust up">▲</button>
+      <button class="lt" data-dir="left" aria-label="thrust left">◀</button>
+      <button class="dn" data-dir="down" aria-label="thrust down">▼</button>
+      <button class="rt" data-dir="right" aria-label="thrust right">▶</button>
+    </div>
+  </div>
+
+  <div class="credit">TaDa · Portfolio Build · Space Situational Awareness</div>
+
+  <!-- START SCREEN -->
+  <div class="screen" id="startScreen">
+    <div class="dialog">
+      <div class="top"><span class="kicker">Mission Briefing · 01</span></div>
+      <div class="top" style="padding-top:6px"><h1>ORBIT <em>GUARDIAN</em></h1></div>
+      <p class="brief">저궤도(LEO)는 3만 개가 넘는 추적 물체로 붐빕니다. 당신은 <b>충돌 회피 관제사</b>입니다.
+        위성을 궤도에 유지하고, 접근하는 <b>우주 데브리</b>를 <b>Δv 분사</b>로 회피하며, 기회가 오면
+        지상 <b>관측 임무</b>를 수행하세요. 연료는 유한하고 중력은 늘 지구로 끌어당깁니다.</p>
+      <div class="fleet" id="fleet"></div>
+      <div class="actions">
+        <button class="go-btn" id="launchBtn">▶ 임무 개시 &nbsp;LAUNCH</button>
+        <span class="keys">조작 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑↓←→</kbd> · 일시정지 <kbd>P</kbd></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div class="screen hide" id="overScreen">
+    <div class="dialog">
+      <div class="top"><span class="kicker" id="overKicker">Mission Report</span></div>
+      <div class="top" style="padding-top:6px"><h1 id="overTitle">임무 종료</h1></div>
+      <p class="verdict" id="overVerdict"></p>
+      <div class="report">
+        <div class="cell"><div class="k">Mission Score</div><div class="v val" id="rScore">0</div></div>
+        <div class="cell"><div class="k">Survival Time</div><div class="v val" id="rTime">0<em>s</em></div></div>
+        <div class="cell"><div class="k">Debris Evaded</div><div class="v val" id="rEvaded">0</div></div>
+        <div class="cell"><div class="k">Imagery Captured</div><div class="v val" id="rShots">0</div></div>
+      </div>
+      <div class="actions">
+        <button class="go-btn" id="againBtn">↻ 재출격 &nbsp;RE-DEPLOY</button>
+        <span class="keys" id="overNote"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+  "use strict";
+  const cv=document.getElementById('scope'), ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W=0,H=0,DPR=1,cx=0,cy=0;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight; cx=W/2; cy=H/2;
+    cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize',resize);
+
+  // ---- constants ----
+  const EARTH_R=58, MU=1150000, THRUST=58, FUEL_BURN=17, FUEL_REGEN=5.4;
+  const WARN=52, CRIT=22, HIT=12, KM=3.6, KMS=0.045;
+  const SHIPS={
+    scout :{nm:'RECON-Ⅰ',cls:'CUBESAT · AGILE', mass:.8,thrust:1.35,fuel:80, hull:70, r:5},
+    obs   :{nm:'HELIOS-Ⅱ',cls:'OBSERVATION · BALANCED',mass:1,thrust:1,fuel:100,hull:100,r:6},
+    station:{nm:'AEGIS-Ⅴ',cls:'PLATFORM · RUGGED', mass:1.35,thrust:.72,fuel:130,hull:150,r:8},
+  };
+  const KEYMAP={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
+
+  // ---- state ----
+  let state='menu', chosen='obs';
+  let sat, debris=[], targets=[], stars=[], particles=[];
+  let met=0, score=0, evaded=0, shots=0, spawnT=0, statusLevel=0;
+  const input={up:false,down:false,left:false,right:false};
+
+  function makeStars(){stars=[];const n=reduce?90:170;for(let i=0;i<n;i++)stars.push({x:Math.random(),y:Math.random(),z:Math.random()*.8+.2,p:Math.random()*6.28});}
+  function seedTargets(){targets=[];const n=4;for(let i=0;i<n;i++)targets.push({ang:Math.random()*6.28,done:false,glow:0});}
+  function reset(){
+    const s=SHIPS[chosen];
+    const r=192, v=Math.sqrt(MU/r);
+    sat={x:r,y:0,vx:0,vy:v, fuel:s.fuel,fuelMax:s.fuel, hull:s.hull,hullMax:s.hull,
+         thrust:THRUST*s.thrust, r:s.r, heading:-Math.PI/2, hitCd:0};
+    debris=[];particles=[];met=0;score=0;evaded=0;shots=0;spawnT=1.2;statusLevel=0;
+    seedTargets(); log('시스템 정상. 궤도 안정화 완료.','go'); log('<b>DEBRIS 추적망 활성.</b> 회피 준비.');
+  }
+
+  // ---- logging ----
+  const logEl=document.getElementById('log'); let logLines=[];
+  function log(html,cls){logLines.push({html,cls:cls||''}); if(logLines.length>7)logLines.shift();
+    logEl.innerHTML=logLines.map(l=>`<div class="line ${l.cls}">${l.html}</div>`).reverse().join('');}
+
+  // ---- spawning ----
+  function spawnDebris(){
+    const edge=Math.max(W,H)*0.62+40, a=Math.random()*6.28;
+    const px=cx+Math.cos(a)*edge, py=cy+Math.sin(a)*edge;
+    // aim near the satellite's current vicinity with scatter
+    const sx=cx+sat.x, sy=cy+sat.y;
+    // 절반은 위성 조준(호밍), 절반은 지구권 통과 트래픽 — 무자비함 완화
+    const homing=Math.random()<0.5;
+    const baseAim=homing?Math.atan2(sy-py,sx-px):Math.atan2(cy-py,cx-px);
+    const aim=baseAim+(Math.random()-.5)*(homing?0.95:1.5);
+    const spd=(50+Math.random()*52)*(1+met*0.008);
+    debris.push({x:px-cx,y:py-cy,vx:Math.cos(aim)*spd,vy:Math.sin(aim)*spd,
+      r:2.6+Math.random()*3, threat:0, id:(Math.random()*9000|0).toString(16).toUpperCase().padStart(3,'0'),
+      spin:Math.random()*6.28, ds:(Math.random()-.5)*4});
+  }
+
+  // ---- input ----
+  function bindKeys(){
+    addEventListener('keydown',e=>{
+      if(e.code==='KeyP'&&state!=='menu'){togglePause();return;}
+      if((e.code==='Enter'||e.code==='Space')){ if(state==='menu'){launch();e.preventDefault();return;} if(state==='over'){launch();e.preventDefault();return;} }
+      const d=KEYMAP[e.code]; if(d){input[d]=true; e.preventDefault();}
+    });
+    addEventListener('keyup',e=>{const d=KEYMAP[e.code]; if(d)input[d]=false;});
+  }
+  function bindPad(){
+    document.querySelectorAll('#dpad button').forEach(b=>{
+      const d=b.dataset.dir;
+      const on=e=>{e.preventDefault();input[d]=true;b.classList.add('on');};
+      const off=e=>{e.preventDefault();input[d]=false;b.classList.remove('on');};
+      b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off);
+      b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off);
+    });
+  }
+
+  // ---- fleet UI ----
+  function buildFleet(){
+    const wrap=document.getElementById('fleet');
+    wrap.innerHTML=Object.entries(SHIPS).map(([k,s])=>{
+      const ag=Math.round(s.thrust*62), fu=Math.round(s.fuel/1.3), hu=Math.round(s.hull/1.5);
+      return `<button class="ship ${k===chosen?'sel':''}" data-k="${k}">
+        <div class="nm">◈ ${s.nm}</div><div class="cls">${s.cls}</div>
+        <div class="stat">기동 <div class="bar"><i style="width:${ag}%"></i></div></div>
+        <div class="stat">연료 <div class="bar"><i style="width:${fu}%"></i></div></div>
+        <div class="stat">내구 <div class="bar"><i style="width:${hu}%"></i></div></div>
+      </button>`;}).join('');
+    wrap.querySelectorAll('.ship').forEach(b=>b.addEventListener('click',()=>{
+      chosen=b.dataset.k; wrap.querySelectorAll('.ship').forEach(x=>x.classList.remove('sel')); b.classList.add('sel');}));
+  }
+
+  // ---- flow ----
+  let paused=false;
+  function launch(){document.getElementById('startScreen').classList.add('hide');
+    document.getElementById('overScreen').classList.add('hide'); reset(); state='play'; paused=false;}
+  function togglePause(){ if(state!=='play'&&state!=='paused')return;
+    paused=!paused; state=paused?'paused':'play'; setStatus(paused?1:statusLevel,paused?'PAUSED':null);}
+  function gameOver(reason,cause){
+    state='over';
+    const scr=document.getElementById('overScreen'); scr.classList.remove('hide');
+    document.getElementById('overTitle').textContent=cause;
+    document.getElementById('overVerdict').textContent=reason;
+    document.getElementById('rScore').textContent=score.toLocaleString();
+    document.getElementById('rTime').innerHTML=Math.floor(met)+'<em>s</em>';
+    document.getElementById('rEvaded').textContent=evaded;
+    document.getElementById('rShots').textContent=shots;
+    let rank='ORBITAL CADET';
+    if(score>2500)rank='FLIGHT CONTROLLER'; if(score>6000)rank='MISSION DIRECTOR'; if(score>12000)rank='GUARDIAN PRIME';
+    document.getElementById('overKicker').textContent='Mission Report · Rank: '+rank;
+    document.getElementById('overNote').innerHTML='<kbd>Enter</kbd> 다시 출격';
+  }
+
+  function setStatus(lvl,txt){
+    const pill=document.getElementById('statusPill'), t=document.getElementById('statusTxt');
+    pill.classList.remove('warn','crit');
+    if(lvl===2){pill.classList.add('crit'); t.textContent=txt||'COLLISION ALERT';}
+    else if(lvl===1){pill.classList.add('warn'); t.textContent=txt||'CONJUNCTION WARNING';}
+    else t.textContent=txt||'NOMINAL';
+  }
+
+  // ---- update ----
+  function update(dt){
+    met+=dt;
+    // gravity + thrust
+    const r=Math.hypot(sat.x,sat.y);
+    const g=MU/(r*r), gx=-sat.x/r*g, gy=-sat.y/r*g;
+    let tx=0,ty=0;
+    if(input.up)ty-=1; if(input.down)ty+=1; if(input.left)tx-=1; if(input.right)tx+=1;
+    const firing=(tx||ty)&&sat.fuel>0;
+    if(firing){const m=Math.hypot(tx,ty); tx/=m; ty/=m;
+      sat.vx+=tx*sat.thrust*dt; sat.vy+=ty*sat.thrust*dt;
+      sat.fuel=Math.max(0,sat.fuel-FUEL_BURN*dt); sat.heading=Math.atan2(ty,tx);
+      if(!reduce&&Math.random()<.6)particles.push({x:sat.x-tx*sat.r,y:sat.y-ty*sat.r,vx:-tx*40+(Math.random()-.5)*20,vy:-ty*40+(Math.random()-.5)*20,life:.5,cy:1});
+    } else if(sat.fuel<sat.fuelMax){sat.fuel=Math.min(sat.fuelMax,sat.fuel+FUEL_REGEN*dt);}
+    sat.vx+=gx*dt; sat.vy+=gy*dt; sat.x+=sat.vx*dt; sat.y+=sat.vy*dt;
+    if(sat.hitCd>0)sat.hitCd-=dt;
+
+    // fail states
+    if(r<EARTH_R+3){return gameOver('궤도를 유지하지 못하고 대기권에 재진입 — 위성 소실.','DEORBIT · 재진입 소실');}
+    if(r>Math.max(W,H)*0.95){return gameOver('궤도 이탈 속도 초과 — 심우주로 이탈해 통신 두절.','LOST · 궤도 이탈');}
+    if(sat.hull<=0){return gameOver('연쇄 충돌로 위성 구조 붕괴 — 임무 실패.','DESTROYED · 구조 붕괴');}
+
+    // difficulty & spawn
+    spawnT-=dt; const interval=Math.max(0.72,2.3-met*0.013);
+    if(spawnT<=0){spawnDebris(); spawnT=interval;}
+
+    // debris
+    let worst=0;
+    for(let i=debris.length-1;i>=0;i--){
+      const d=debris[i]; d.x+=d.vx*dt; d.y+=d.vy*dt; d.spin+=d.ds*dt;
+      const dx=d.x-sat.x, dy=d.y-sat.y, dist=Math.hypot(dx,dy);
+      // conjunction assessment (closest approach)
+      const rvx=d.vx-sat.vx, rvy=d.vy-sat.vy, rv2=rvx*rvx+rvy*rvy;
+      let miss=dist; if(rv2>0){let tca=-(dx*rvx+dy*rvy)/rv2; if(tca>0&&tca<3){miss=Math.hypot(dx+rvx*tca,dy+rvy*tca);}}
+      d.threat = miss<CRIT?2 : (miss<WARN?1:0);
+      if(d.threat>worst)worst=d.threat;
+      if(dist<HIT+sat.r && sat.hitCd<=0){
+        sat.hull-=34; sat.hitCd=0.9;
+        for(let k=0;k<14;k++)particles.push({x:d.x,y:d.y,vx:(Math.random()-.5)*120,vy:(Math.random()-.5)*120,life:.6,cy:0});
+        log(`<b>충돌!</b> OBJ ${d.id} 피격 · 내구 -34%`,'crit'); setStatus(2); statusLevel=2;
+        debris.splice(i,1); continue;
+      }
+      // out of bounds -> evaded
+      if(Math.hypot(d.x,d.y)>Math.max(W,H)*0.7){ if(d.everClose){evaded++; score+=15;} debris.splice(i,1); continue; }
+      if(dist<WARN*1.6)d.everClose=true;
+    }
+    // status from threats (unless mid-collision flash)
+    if(sat.hitCd<=0.3){statusLevel=worst; setStatus(worst);}
+
+    // observation targets — capture when ground-track aligns
+    const satAng=Math.atan2(sat.y,sat.x);
+    for(const t of targets){
+      if(t.done){continue;}
+      let da=Math.abs(((satAng-t.ang+Math.PI*3)%(Math.PI*2))-Math.PI);
+      if(da<0.14 && r<EARTH_R+120){ t.done=true; t.glow=1; shots++; score+=300;
+        sat.fuel=Math.min(sat.fuelMax,sat.fuel+12);
+        log('<b>관측 성공.</b> 지상 타깃 촬영 · +300 · Δv 보급','go');
+        setTimeout(()=>{t.done=false;t.ang=Math.random()*6.28;},4200);
+      }
+    }
+    for(const t of targets)if(t.glow>0)t.glow=Math.max(0,t.glow-dt*1.2);
+
+    // particles
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i]; p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt; if(p.life<=0)particles.splice(i,1);}
+
+    // survival score
+    score+=Math.round(dt*22);
+  }
+
+  // ---- render ----
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // starfield
+    ctx.save();
+    for(const s of stars){const x=s.x*W,y=s.y*H; let a=s.z*.5;
+      if(!reduce){a*= .6+.4*Math.sin(met*2+s.p);} ctx.fillStyle=`rgba(150,180,210,${a})`; ctx.fillRect(x,y,s.z>0.7?1.6:1,s.z>0.7?1.6:1);}
+    ctx.restore();
+
+    ctx.save(); ctx.translate(cx,cy);
+
+    // orbit range rings
+    ctx.strokeStyle='rgba(30,55,72,.5)'; ctx.lineWidth=1;
+    for(let rr=110;rr<Math.max(W,H)*0.9;rr+=90){ctx.beginPath();ctx.arc(0,0,rr,0,6.2832);ctx.stroke();}
+    // radial ticks
+    ctx.strokeStyle='rgba(24,45,60,.55)';
+    for(let a=0;a<12;a++){ctx.beginPath();const c=Math.cos(a/12*6.2832),s=Math.sin(a/12*6.2832);ctx.moveTo(c*EARTH_R,s*EARTH_R);ctx.lineTo(c*Math.max(W,H)*.9,s*Math.max(W,H)*.9);ctx.stroke();}
+
+    // Earth
+    const eg=ctx.createRadialGradient(-18,-18,6,0,0,EARTH_R);
+    eg.addColorStop(0,'#1b6fb0'); eg.addColorStop(.55,'#134a78'); eg.addColorStop(1,'#08243c');
+    ctx.beginPath();ctx.arc(0,0,EARTH_R,0,6.2832);ctx.fillStyle=eg;ctx.fill();
+    ctx.strokeStyle='rgba(90,200,220,.35)';ctx.lineWidth=1.5;ctx.stroke();
+    // atmosphere glow
+    ctx.beginPath();ctx.arc(0,0,EARTH_R+5,0,6.2832);ctx.strokeStyle='rgba(60,150,200,.18)';ctx.lineWidth=8;ctx.stroke();
+    // continents hint
+    ctx.save();ctx.beginPath();ctx.arc(0,0,EARTH_R,0,6.2832);ctx.clip();
+    ctx.fillStyle='rgba(46,120,84,.55)';
+    ctx.beginPath();ctx.ellipse(-14,-8,15,10,.4,0,6.28);ctx.ellipse(16,14,12,16,-.3,0,6.28);ctx.fill();
+    ctx.restore();
+
+    if(state!=='menu'){
+      // observation targets on surface
+      for(const t of targets){
+        const tx=Math.cos(t.ang)*(EARTH_R-3), ty=Math.sin(t.ang)*(EARTH_R-3);
+        ctx.beginPath();ctx.arc(tx,ty,3.4,0,6.28);
+        ctx.fillStyle=t.done?'rgba(65,224,138,.35)':'#41e08a';ctx.fill();
+        const pulse=t.glow>0?t.glow:(0.4+0.3*Math.sin(met*3+t.ang));
+        ctx.beginPath();ctx.arc(tx,ty,6+pulse*7,0,6.28);ctx.strokeStyle=`rgba(65,224,138,${0.15+pulse*.4})`;ctx.lineWidth=1.4;ctx.stroke();
+      }
+      // satellite ground-track projection line
+      const sa=Math.atan2(sat.y,sat.x);
+      ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(sa)*Math.hypot(sat.x,sat.y),Math.sin(sa)*Math.hypot(sat.x,sat.y));
+      ctx.strokeStyle='rgba(55,224,208,.1)';ctx.lineWidth=1;ctx.stroke();
+
+      // debris
+      for(const d of debris){
+        const col=d.threat===2?'#ff4d5e':d.threat===1?'#f2a93b':'#8aa0b4';
+        if(d.threat){ // vector + lead line
+          ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x+d.vx*.5,d.y+d.vy*.5);
+          ctx.strokeStyle=d.threat===2?'rgba(255,77,94,.6)':'rgba(242,169,59,.5)';ctx.lineWidth=1;ctx.stroke();
+          ctx.beginPath();ctx.arc(d.x,d.y,d.r+6+(d.threat===2?2*Math.sin(met*12):0),0,6.28);
+          ctx.strokeStyle=col;ctx.lineWidth=1;ctx.globalAlpha=.6;ctx.stroke();ctx.globalAlpha=1;
+        }
+        ctx.save();ctx.translate(d.x,d.y);ctx.rotate(d.spin);
+        ctx.fillStyle=col;ctx.fillRect(-d.r,-d.r*.7,d.r*2,d.r*1.4);
+        ctx.restore();
+      }
+      // particles
+      for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*1.6);
+        ctx.fillStyle=p.cy?'#37e0d0':'#ff8a4d';ctx.fillRect(p.x-1,p.y-1,2.4,2.4);}
+      ctx.globalAlpha=1;
+
+      // satellite
+      const flash=sat.hitCd>0.5;
+      const sa2=Math.atan2(sat.vy,sat.vx);
+      ctx.save();ctx.translate(sat.x,sat.y);ctx.rotate(sa2);
+      // orbit velocity trail
+      ctx.restore();
+      ctx.save();ctx.translate(sat.x,sat.y);ctx.rotate(sat.heading);
+      ctx.fillStyle=flash?'#ff4d5e':'#eaf6ff';
+      ctx.beginPath();ctx.moveTo(sat.r+3,0);ctx.lineTo(-sat.r,sat.r-1);ctx.lineTo(-sat.r*.4,0);ctx.lineTo(-sat.r,-(sat.r-1));ctx.closePath();ctx.fill();
+      // solar panels
+      ctx.fillStyle=flash?'rgba(255,77,94,.7)':'rgba(55,224,208,.7)';
+      ctx.fillRect(-sat.r*.3,-sat.r-3,sat.r*.6,2.5);ctx.fillRect(-sat.r*.3,sat.r+.5,sat.r*.6,2.5);
+      ctx.restore();
+      // proximity ring
+      ctx.beginPath();ctx.arc(sat.x,sat.y,WARN,0,6.28);ctx.strokeStyle='rgba(55,224,208,.12)';ctx.lineWidth=1;ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---- HUD sync ----
+  let hudT=0;
+  function syncHUD(dt){
+    hudT+=dt; if(hudT<0.1)return; hudT=0;
+    const r=Math.hypot(sat.x,sat.y), v=Math.hypot(sat.vx,sat.vy);
+    document.getElementById('alt').textContent=Math.max(0,Math.round((r-EARTH_R)*KM)).toLocaleString();
+    document.getElementById('vel').textContent=(v*KMS).toFixed(2);
+    const fp=Math.round(sat.fuel/sat.fuelMax*100), hp=Math.round(Math.max(0,sat.hull)/sat.hullMax*100);
+    document.getElementById('fuelPct').textContent=fp; document.getElementById('hullPct').textContent=hp;
+    const fg=document.getElementById('fuelGauge'), hg=document.getElementById('hullGauge');
+    fg.firstElementChild.style.width=fp+'%'; hg.firstElementChild.style.width=hp+'%';
+    fg.classList.toggle('low',fp<40&&fp>=18); fg.classList.toggle('crit',fp<18);
+    hg.classList.toggle('low',hp<50&&hp>=25); hg.classList.toggle('crit',hp<25);
+    document.getElementById('score').textContent=score.toLocaleString();
+    document.getElementById('clock').textContent=fmt(met);
+    // tracked objects
+    const sorted=[...debris].sort((a,b)=>b.threat-a.threat).slice(0,5);
+    document.getElementById('objCount').textContent=debris.length;
+    document.getElementById('objlist').innerHTML=sorted.map(d=>{
+      const dist=Math.round(Math.hypot(d.x-sat.x,d.y-sat.y)*KM);
+      const tg=d.threat===2?'<span class="tag crit">■ CRIT</span>':d.threat===1?'<span class="tag">▲ WARN</span>':'<span style="color:var(--ink-faint)">○ TRACK</span>';
+      return `<div class="row"><span>OBJ ${d.id}</span><span>${dist.toLocaleString()} km</span>${tg}</div>`;
+    }).join('')||'<div class="row" style="color:var(--ink-faint)">— 접근 물체 없음 —</div>';
+  }
+  function fmt(s){const m=Math.floor(s/60),ss=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');}
+
+  // ---- loop ----
+  let last=0;
+  function frame(ts){
+    const dt=Math.min(0.05,(ts-last)/1000||0); last=ts;
+    if(state==='play'){update(dt); if(state==='play')syncHUD(dt);}
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---- boot ----
+  function boot(){
+    resize(); makeStars(); buildFleet();
+    // menu shows a calm demo earth; init a dummy sat for HUD safety
+    sat={x:192,y:0,vx:0,vy:Math.sqrt(MU/192),fuel:100,fuelMax:100,hull:100,hullMax:100,thrust:THRUST,r:6,heading:-Math.PI/2,hitCd:0};
+    bindKeys(); bindPad();
+    document.getElementById('launchBtn').addEventListener('click',launch);
+    document.getElementById('againBtn').addEventListener('click',launch);
+    requestAnimationFrame(frame);
+  }
+  boot();
+})();
+</script>
+
+</body>
+</html>
