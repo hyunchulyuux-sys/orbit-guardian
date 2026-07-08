@@ -69,8 +69,8 @@
   .tl-head{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;margin-bottom:8px}
   .tl-head .now{color:var(--cyan)} .tl-head .off{color:var(--ink);margin-left:auto}
   .tl-wrap{position:relative}
-  #scrub{width:100%;-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;outline:none;
-    background:linear-gradient(90deg,#3a2a12 0%,#3a2a12 var(--nowpct,81%),#12283a var(--nowpct,81%),#12283a 100%)}
+  #scrub{width:100%;-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;outline:none;
+    background:linear-gradient(90deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.05) var(--nowpct,81%),rgba(255,255,255,.15) var(--nowpct,81%),rgba(255,255,255,.15) 100%)}
   #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--ink);
     border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
   #scrub::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
@@ -91,8 +91,8 @@
   .sl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:4px}
   .sl label b{color:var(--ink)}
   .sl input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.1);outline:none}
-  .sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--amber);border:3px solid var(--void);box-shadow:0 0 0 1px rgba(210,162,76,.5);cursor:grab}
-  .sl input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--amber);border:3px solid var(--void);box-shadow:0 0 0 1px rgba(210,162,76,.5);cursor:grab}
+  .sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
+  .sl input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
   .mnv-out{font-family:var(--mono);font-size:11px;margin:11px 0 4px;padding:9px 10px;border-radius:7px;background:rgba(255,255,255,.03);line-height:1.7}
   .mnv-out .big{font-size:15px;font-weight:700}
   .mnv-btns{display:flex;gap:7px;margin-top:11px}
