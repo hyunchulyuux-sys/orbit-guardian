@@ -219,20 +219,23 @@ const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(1.6,devicePixelRatio||1));
 renderer.setSize(innerWidth,innerHeight); app.appendChild(renderer.domElement);
-const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x04060b,0.0009);
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x04060b,0.0005);
 const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,0.5,6000);
-scene.add(new THREE.AmbientLight(0x93b0c8,0.6));
-const sun=new THREE.DirectionalLight(0xfff3e4,1.45); sun.position.set(800,380,520); scene.add(sun);
+scene.add(new THREE.AmbientLight(0xa9c4dc,0.75));
+const sun=new THREE.DirectionalLight(0xfff6ea,2.1); sun.position.set(800,380,520); scene.add(sun);
 
 // Earth — 실사 텍스처 + 실제 항성시(GMST)에 맞춘 자전 → 어느 나라 위인지 파악 가능
-const earthMat=new THREE.MeshStandardMaterial({color:0x8a9bad,emissive:0x0a1622,emissiveIntensity:0.4,roughness:1,metalness:0});
+const earthMat=new THREE.MeshStandardMaterial({color:0x9fb2c6,emissive:0x0a1622,emissiveIntensity:0.4,roughness:.9,metalness:0});
 const earth=new THREE.Mesh(new THREE.SphereGeometry(R3,64,64),earthMat); scene.add(earth);
 new THREE.TextureLoader().load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg',
-  t=>{ t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; earthMat.map=t; earthMat.color.set(0xffffff); earthMat.needsUpdate=true; });
+  t=>{ t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8;
+    earthMat.map=t; earthMat.emissiveMap=t;                 // 텍스처를 자체발광에도 사용 → 쨍하고 밤면도 살아있음
+    earthMat.color.set(0xffffff); earthMat.emissive.set(0xffffff); earthMat.emissiveIntensity=0.55;
+    earthMat.needsUpdate=true; });
 const grid=new THREE.Mesh(new THREE.SphereGeometry(R3*1.003,36,24),
   new THREE.MeshBasicMaterial({color:0x2a6f88,wireframe:true,transparent:true,opacity:0.06})); scene.add(grid);
-const atmo=new THREE.Mesh(new THREE.SphereGeometry(R3*1.028,48,48),
-  new THREE.MeshBasicMaterial({color:0x3aa0d8,transparent:true,opacity:0.09,side:THREE.BackSide})); scene.add(atmo);
+const atmo=new THREE.Mesh(new THREE.SphereGeometry(R3*1.03,48,48),
+  new THREE.MeshBasicMaterial({color:0x49b8ee,transparent:true,opacity:0.14,side:THREE.BackSide})); scene.add(atmo);
 { const N=1600,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
   for(let i=0;i<N;i++){const r=2600,u=Math.random()*2-1,t=Math.random()*6.283,s=Math.sqrt(1-u*u);
     p[i*3]=r*s*Math.cos(t);p[i*3+1]=r*u;p[i*3+2]=r*s*Math.sin(t);}
@@ -243,11 +246,38 @@ const atmo=new THREE.Mesh(new THREE.SphereGeometry(R3*1.028,48,48),
 function toRender(x,y,z){ return new THREE.Vector3(x*RENDER, z*RENDER, -y*RENDER); }
 
 // ---------- catalog (real TLE via SGP4) with type-based 3D models ----------
-const TYPECOL={debris:0xc98a5a,sat:0x37e0d0,station:0xffffff};
-function typeGeo(t){
-  if(t==='station'){const g=new THREE.BoxGeometry(0.9,0.28,0.28); return g;}
-  if(t==='sat'){const g=new THREE.BoxGeometry(0.34,0.34,0.9); return g;}   // payload
-  // debris: irregular
+// NORAD 실제 분류(Payload/Rocket Body/Debris/Unknown) 기반 타입별 3D 모델
+const TYPECOL={debris:0xe0904a,payload:0xf2c24c,rocketbody:0x5fd98a,unknown:0xc77dff};
+function mergeGeos(list){
+  const P=[],N=[];
+  for(let g of list){ g=g.index?g.toNonIndexed():g; if(!g.attributes.normal)g.computeVertexNormals();
+    const p=g.attributes.position,n=g.attributes.normal;
+    for(let i=0;i<p.count;i++){P.push(p.getX(i),p.getY(i),p.getZ(i));N.push(n.getX(i),n.getY(i),n.getZ(i));} }
+  const m=new THREE.BufferGeometry();
+  m.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+  m.setAttribute('normal',new THREE.Float32BufferAttribute(N,3)); return m;
+}
+function kindOf(name,t){ const n=(name||'').toUpperCase();
+  if(/R\/B|ROCKET/.test(n))return 'rocketbody';
+  if(/DEB|DEBRIS|FRAG|COOLANT/.test(n))return 'debris';
+  if(/UNKNOWN|TBA/.test(n))return 'unknown';
+  if(t==='debris')return 'debris'; return 'payload'; // sat·station 등 = payload
+}
+function typeGeo(k){
+  if(k==='payload'){ // 본체 + 태양전지판 2 + 접시 안테나
+    const body=new THREE.BoxGeometry(0.3,0.3,0.44);
+    const pL=new THREE.BoxGeometry(0.82,0.32,0.035); pL.translate(-0.6,0,0);
+    const pR=new THREE.BoxGeometry(0.82,0.32,0.035); pR.translate(0.6,0,0);
+    const dish=new THREE.ConeGeometry(0.14,0.16,10); dish.rotateX(-Math.PI/2); dish.translate(0,0,0.32);
+    return mergeGeos([body,pL,pR,dish]);
+  }
+  if(k==='rocketbody'){ // 원통 + 테이퍼 노즐
+    const body=new THREE.CylinderGeometry(0.2,0.2,0.62,12);
+    const noz=new THREE.CylinderGeometry(0.2,0.1,0.16,12); noz.translate(0,-0.39,0);
+    return mergeGeos([body,noz]);
+  }
+  if(k==='unknown'){ return new THREE.IcosahedronGeometry(0.32,1); } // 측지구
+  // debris: 각진 불규칙 조각
   const g=new THREE.IcosahedronGeometry(0.3,0); const pos=g.attributes.position;
   for(let i=0;i<pos.count;i++){const f=0.55+Math.random()*0.9; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);} g.computeVertexNormals(); return g;
 }
@@ -255,17 +285,15 @@ let CAT=[], instByType={};
 function buildCatalog(data){
   CAT=(data||[]).map(o=>{let rec=null;try{rec=satellite.twoline2satrec(o.l1,o.l2);}catch(e){}
     return {rec,type:o.t,name:o.n,r:new THREE.Vector3(),ok:false,alt:0};}).filter(o=>o.rec);
-  // precompute mean altitude for filtering (from mean motion)
-  for(const o of CAT){ const n=o.rec.no*(1440/(2*Math.PI))/1440; const nrev=o.rec.no; // rad/min
-    const a=Math.cbrt(MU/Math.pow(nrev/60,2)); o.alt=a-RE; o.a=a; o.ecc=o.rec.ecco; }
-  const byType={station:[],sat:[],debris:[]};
-  CAT.forEach((o,i)=>{o.i=i; (byType[o.type]||byType.debris).push(i);});
-  for(const t of ['debris','sat','station']){
-    const ids=byType[t]||[]; if(!ids.length)continue;
-    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[t],emissive:new THREE.Color(TYPECOL[t]).multiplyScalar(0.18),roughness:.55,metalness:.35});
-    const im=new THREE.InstancedMesh(typeGeo(t),mat,ids.length); im.frustumCulled=false;
+  for(const o of CAT){ const nrev=o.rec.no; const a=Math.cbrt(MU/Math.pow(nrev/60,2)); o.alt=a-RE; o.a=a; o.ecc=o.rec.ecco; o.kind=kindOf(o.name,o.type); }
+  const byKind={debris:[],payload:[],rocketbody:[],unknown:[]};
+  CAT.forEach((o,i)=>{o.i=i; (byKind[o.kind]||byKind.debris).push(i);});
+  for(const k of ['debris','payload','rocketbody','unknown']){
+    const ids=byKind[k]; if(!ids.length)continue;
+    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[k],emissive:new THREE.Color(TYPECOL[k]).multiplyScalar(0.22),roughness:.5,metalness:.4});
+    const im=new THREE.InstancedMesh(typeGeo(k),mat,ids.length); im.frustumCulled=false;
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    instByType[t]={mesh:im,ids}; scene.add(im);
+    instByType[k]={mesh:im,ids}; scene.add(im);
   }
 }
 const _d=new THREE.Object3D();
@@ -279,7 +307,7 @@ function renderCatalog(highlightIdx){
     for(let k=0;k<ids.length;k++){ const o=CAT[ids[k]];
       if(!o.ok){_d.position.set(0,-1e5,0);_d.scale.setScalar(.0001);}
       else{const v=toRender(o.r.x,o.r.y,o.r.z);_d.position.copy(v);
-        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?2.6:1);
+        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?3.6:1);
         _d.rotation.set(o.i*0.7,o.i*1.3,0);}
       _d.updateMatrix(); mesh.setMatrixAt(k,_d.matrix);
       mesh.setColorAt(k,new THREE.Color(o.i===highlightIdx?0xff4d5e:TYPECOL[t]));
@@ -343,11 +371,18 @@ function makeSat(){ const g=new THREE.Group();
   b.rotation.z=Math.PI/2; g.add(b);
   const p=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.9,0.32),new THREE.MeshStandardMaterial({color:0x2a5266,emissive:0x0d3540,emissiveIntensity:.7,roughness:.4,metalness:.5})); g.add(p);
   return g; }
+let selMarker=null, selLine=null;
+function reticleTex(){ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
+  x.strokeStyle='#ff4d5e'; x.lineWidth=7; x.beginPath(); x.arc(64,64,42,0,7); x.stroke();
+  x.lineWidth=6; for(const a of [0,90,180,270]){const r=a*Math.PI/180; x.beginPath(); x.moveTo(64+Math.cos(r)*40,64+Math.sin(r)*40); x.lineTo(64+Math.cos(r)*60,64+Math.sin(r)*60); x.stroke();}
+  return new THREE.CanvasTexture(c); }
 function buildMyVisuals(){
   mySat=makeSat(); scene.add(mySat);
   myRing=new THREE.Mesh(new THREE.RingGeometry(0.55,0.62,32),new THREE.MeshBasicMaterial({color:0x37e0d0,transparent:true,opacity:.5,side:THREE.DoubleSide})); scene.add(myRing);
   orbitLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x37e0d0,transparent:true,opacity:.5})); scene.add(orbitLine);
   planLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x41e08a,transparent:true,opacity:.7})); planLine.visible=false; scene.add(planLine);
+  selMarker=new THREE.Sprite(new THREE.SpriteMaterial({map:reticleTex(),transparent:true,depthTest:false,depthWrite:false})); selMarker.visible=false; selMarker.renderOrder=999; scene.add(selMarker);
+  selLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedMaterial({color:0xff4d5e,transparent:true,opacity:.55,dashSize:0.6,gapSize:0.4,depthTest:false})); selLine.visible=false; selLine.renderOrder=998; scene.add(selLine);
 }
 function sampleOrbit(src,ms0){
   const a=(2/Math.hypot(...src.r0) - (src.v0[0]**2+src.v0[1]**2+src.v0[2]**2)/MU); const sma=1/a;
@@ -546,9 +581,20 @@ function frame(now){
   if(catAcc>=0.16||!catDate){ catAcc=0; propagateCatalog(new Date(nowMs)); catDate=nowMs;
     renderCatalog(selConj!==null?CONJ[selConj].obj.i:-1); }
   // my sat
-  if(mySat){ const st=myStateAt(nowMs); const v=toRender(st.r[0],st.r[1],st.r[2]);
+  let myV=null;
+  if(mySat){ const st=myStateAt(nowMs); const v=toRender(st.r[0],st.r[1],st.r[2]); myV=v;
     mySat.position.copy(v); myRing.position.copy(v);
     const vv=toRender(st.r[0]+st.v[0],st.r[1]+st.v[1],st.r[2]+st.v[2]); mySat.lookAt(vv); myRing.lookAt(vv);
+  }
+  // selected object marker (reticle + link line)
+  if(selMarker){
+    const c=selConj!==null?CONJ[selConj]:null;
+    if(c&&c.obj.ok){ const v=toRender(c.obj.r.x,c.obj.r.y,c.obj.r.z);
+      selMarker.position.copy(v);
+      const dcam=camera.position.distanceTo(v); selMarker.scale.setScalar(Math.max(1.6,dcam*0.05));
+      selMarker.visible=true;
+      if(myV){ selLine.geometry.setFromPoints([myV,v]); selLine.computeLineDistances(); selLine.visible=true; } else selLine.visible=false;
+    } else { selMarker.visible=false; selLine.visible=false; }
   }
   const gmst=satellite.gstime(new Date(nowMs)); earth.rotation.y=gmst; grid.rotation.y=gmst;
   updateCamera(); updateTele(nowMs);
