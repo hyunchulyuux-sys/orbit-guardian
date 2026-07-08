@@ -224,12 +224,13 @@ const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,0.5,6000);
 scene.add(new THREE.AmbientLight(0x93b0c8,0.6));
 const sun=new THREE.DirectionalLight(0xfff3e4,1.45); sun.position.set(800,380,520); scene.add(sun);
 
-// Earth
-const earth=new THREE.Mesh(new THREE.SphereGeometry(R3,64,64),
-  new THREE.MeshStandardMaterial({color:0x113652,emissive:0x07141f,roughness:1,metalness:0}));
-scene.add(earth);
-const grid=new THREE.Mesh(new THREE.SphereGeometry(R3*1.001,36,24),
-  new THREE.MeshBasicMaterial({color:0x1d5a72,wireframe:true,transparent:true,opacity:0.12})); scene.add(grid);
+// Earth — 실사 텍스처 + 실제 항성시(GMST)에 맞춘 자전 → 어느 나라 위인지 파악 가능
+const earthMat=new THREE.MeshStandardMaterial({color:0x8a9bad,emissive:0x0a1622,emissiveIntensity:0.4,roughness:1,metalness:0});
+const earth=new THREE.Mesh(new THREE.SphereGeometry(R3,64,64),earthMat); scene.add(earth);
+new THREE.TextureLoader().load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg',
+  t=>{ t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; earthMat.map=t; earthMat.color.set(0xffffff); earthMat.needsUpdate=true; });
+const grid=new THREE.Mesh(new THREE.SphereGeometry(R3*1.003,36,24),
+  new THREE.MeshBasicMaterial({color:0x2a6f88,wireframe:true,transparent:true,opacity:0.06})); scene.add(grid);
 const atmo=new THREE.Mesh(new THREE.SphereGeometry(R3*1.028,48,48),
   new THREE.MeshBasicMaterial({color:0x3aa0d8,transparent:true,opacity:0.09,side:THREE.BackSide})); scene.add(atmo);
 { const N=1600,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
@@ -549,7 +550,7 @@ function frame(now){
     mySat.position.copy(v); myRing.position.copy(v);
     const vv=toRender(st.r[0]+st.v[0],st.r[1]+st.v[1],st.r[2]+st.v[2]); mySat.lookAt(vv); myRing.lookAt(vv);
   }
-  earth.rotation.y+=dt*0.015; grid.rotation.y+=dt*0.015;
+  const gmst=satellite.gstime(new Date(nowMs)); earth.rotation.y=gmst; grid.rotation.y=gmst;
   updateCamera(); updateTele(nowMs);
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
