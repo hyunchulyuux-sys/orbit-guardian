@@ -247,7 +247,7 @@ function toRender(x,y,z){ return new THREE.Vector3(x*RENDER, z*RENDER, -y*RENDER
 
 // ---------- catalog (real TLE via SGP4) with type-based 3D models ----------
 // NORAD 실제 분류(Payload/Rocket Body/Debris/Unknown) 기반 타입별 3D 모델
-const TYPECOL={debris:0xe0904a,payload:0xf2c24c,rocketbody:0x5fd98a,unknown:0xc77dff};
+const TYPECOL={debris:0x2fc4e6,payload:0xf2c24c,rocketbody:0x5fd98a,unknown:0xc77dff}; // 캡틴 참고 모델 색: 데브리=청록·페이로드=금·로켓=초록·언노운=마젠타
 function mergeGeos(list){
   const P=[],N=[];
   for(let g of list){ g=g.index?g.toNonIndexed():g; if(!g.attributes.normal)g.computeVertexNormals();
@@ -277,9 +277,9 @@ function typeGeo(k){
     return mergeGeos([body,noz]);
   }
   if(k==='unknown'){ return new THREE.IcosahedronGeometry(0.32,1); } // 측지구
-  // debris: 각진 불규칙 조각
-  const g=new THREE.IcosahedronGeometry(0.3,0); const pos=g.attributes.position;
-  for(let i=0;i<pos.count;i++){const f=0.55+Math.random()*0.9; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);} g.computeVertexNormals(); return g;
+  // debris: 각진 저폴리 크리스탈 조각(캡틴 이미지처럼) — 완만한 불규칙 + 플랫셰이딩으로 각면
+  const g=new THREE.IcosahedronGeometry(0.32,0); const pos=g.attributes.position;
+  for(let i=0;i<pos.count;i++){const f=0.82+Math.random()*0.42; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);} g.computeVertexNormals(); return g;
 }
 let CAT=[], instByType={};
 function buildCatalog(data){
@@ -290,7 +290,7 @@ function buildCatalog(data){
   CAT.forEach((o,i)=>{o.i=i; (byKind[o.kind]||byKind.debris).push(i);});
   for(const k of ['debris','payload','rocketbody','unknown']){
     const ids=byKind[k]; if(!ids.length)continue;
-    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[k],emissive:new THREE.Color(TYPECOL[k]).multiplyScalar(0.22),roughness:.5,metalness:.4});
+    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[k],emissive:new THREE.Color(TYPECOL[k]).multiplyScalar(0.25),roughness:.45,metalness:.45,flatShading:true}); // 저폴리 각면(캡틴 모델 결)
     const im=new THREE.InstancedMesh(typeGeo(k),mat,ids.length); im.frustumCulled=false;
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instByType[k]={mesh:im,ids}; scene.add(im);
@@ -460,7 +460,7 @@ function renderConjList(){
   if(!CONJ.length){el.innerHTML='<div class="empty">향후 7일 내<br>임계 접근 없음 ✓</div>';return;}
   el.innerHTML=CONJ.map((c,i)=>`
     <div class="cj ${riskClass(c.miss)} ${selConj===i?'sel':''}" data-i="${i}">
-      <div class="nm"><span class="dot" style="background:#${TYPECOL[c.obj.type].toString(16).padStart(6,'0')}"></span>${c.obj.name}</div>
+      <div class="nm"><span class="dot" style="background:#${(TYPECOL[c.obj.kind]||TYPECOL.debris).toString(16).padStart(6,'0')}"></span>${c.obj.name}</div>
       <div class="miss">최근접 <b>${c.miss<1?(c.miss*1000).toFixed(0)+' m':c.miss.toFixed(2)+' km'}</b> · 위험 ${riskLabel(c.miss)}</div>
       <div class="meta"><span>TCA T+${fmtT(c.tca)}</span><span>${c.obj.type.toUpperCase()}</span></div>
     </div>`).join('');
