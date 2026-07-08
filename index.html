@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="ORBIT GUARDIAN — 실제 궤도 데이터 기반 3D 위성 생존 관리 게임">
+<meta name="description" content="ORBIT GUARDIAN — 실제 궤도 데이터 기반 위성 충돌 회피 관제 시뮬레이터">
 <title>ORBIT GUARDIAN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛰️</text></svg>">
 <style>
   :root{
-    --ink:#dfe9f3; --dim:#7d92a6; --faint:#42566a; --cyan:#37e0d0; --amber:#f2a93b;
-    --red:#ff4d5e; --go:#41e08a; --void:#04060b;
+    --ink:#e4edf6; --dim:#8598ab; --faint:#3d4f63; --cyan:#37e0d0; --amber:#f2a93b;
+    --red:#ff4d5e; --go:#41e08a; --void:#04060b; --panel:rgba(9,15,24,.82); --line:rgba(255,255,255,.08);
     --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   }
@@ -17,117 +17,187 @@
   html,body{height:100%;background:var(--void);color:var(--ink);font-family:var(--sans);overflow:hidden}
   #app{position:fixed;inset:0}
   canvas{display:block;touch-action:none}
-  .hud{position:absolute;pointer-events:none;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  button{font-family:var(--mono);cursor:pointer}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-  /* minimal telemetry strip (top-left) */
-  .tele{top:14px;left:16px;display:flex;flex-direction:column;gap:10px}
-  .stat{display:flex;align-items:center;gap:9px}
-  .stat .lab{font-size:9px;letter-spacing:.16em;color:var(--dim);width:26px}
-  .bar{width:120px;height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden}
-  .bar>i{display:block;height:100%;border-radius:3px;transition:width .15s linear}
-  .bar.fuel>i{background:linear-gradient(90deg,#1f9fb0,var(--cyan))}
-  .bar.hull>i{background:linear-gradient(90deg,#2f9f6a,var(--go))}
-  .bar.low>i{background:linear-gradient(90deg,#b0421f,var(--amber))!important}
-  .bar.crit>i{background:linear-gradient(90deg,#8a1f2a,var(--red))!important}
-  .stat .num{font-size:11px;color:var(--ink);min-width:44px}
+  /* top bar */
+  #top{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;gap:16px;
+    padding:0 16px;background:linear-gradient(180deg,rgba(4,6,11,.9),rgba(4,6,11,0));pointer-events:none;z-index:5}
+  #top .brand{font-weight:800;letter-spacing:.06em;font-size:14px}
+  #top .brand small{color:var(--cyan);font-weight:600;font-family:var(--mono);font-size:10px;letter-spacing:.18em;margin-left:8px}
+  #top .epoch{font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:auto;pointer-events:auto}
+  #top .epoch b{color:var(--ink)}
+  #live{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--go)}
+  #live i{width:6px;height:6px;border-radius:50%;background:var(--go);box-shadow:0 0 8px var(--go);animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{opacity:.35}}
 
-  /* score (top-right) */
-  .meta{top:14px;right:16px;text-align:right}
-  .meta .sc{font-size:26px;font-weight:700;font-family:var(--sans);letter-spacing:.01em}
-  .meta .met{font-size:10px;letter-spacing:.14em;color:var(--dim);margin-top:1px}
+  /* left telemetry */
+  #tele{position:absolute;top:56px;left:14px;width:206px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:12px 13px;backdrop-filter:blur(8px);z-index:4}
+  .th{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--dim);margin-bottom:9px}
+  .row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:11.5px;padding:3px 0}
+  .row .k{color:var(--dim)} .row .v{color:var(--ink)}
+  .sat-name{font-family:var(--sans);font-weight:700;font-size:13px;margin:-2px 0 8px}
 
-  /* threat pill (top-center, only when active) */
-  .threat{top:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;
-    padding:6px 14px;border:1px solid transparent;border-radius:20px;opacity:0;transition:.2s;font-size:11px;letter-spacing:.12em}
-  .threat.on{opacity:1;border-color:rgba(242,169,59,.5);background:rgba(242,169,59,.08);color:#f4c987}
-  .threat.crit{border-color:rgba(255,77,94,.6);background:rgba(255,77,94,.1);color:#ffb3bb}
-  .threat i{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+  /* right conjunctions */
+  #conj{position:absolute;top:56px;right:14px;width:270px;max-height:calc(100% - 190px);overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 12px 10px;backdrop-filter:blur(8px);z-index:4}
+  #conj::-webkit-scrollbar{width:6px} #conj::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+  .cj{border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-top:8px;cursor:pointer;transition:.12s;background:rgba(255,255,255,.015)}
+  .cj:hover{border-color:rgba(255,255,255,.2)}
+  .cj.sel{border-color:var(--cyan);background:rgba(55,224,208,.07)}
+  .cj.risk-hi{border-left:3px solid var(--red)} .cj.risk-md{border-left:3px solid var(--amber)} .cj.risk-lo{border-left:3px solid var(--go)}
+  .cj .nm{font-family:var(--sans);font-weight:600;font-size:12px;display:flex;align-items:center;gap:6px}
+  .cj .nm .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .cj .meta{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;display:flex;justify-content:space-between}
+  .cj .miss{font-family:var(--mono);font-size:11px;margin-top:3px}
+  .cj .miss b{font-size:13px}
+  .empty{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;padding:18px 0;line-height:1.6}
 
-  /* controls */
-  .pad{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);pointer-events:auto;
-    display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(2,50px);gap:7px}
-  .pad button{font-family:var(--mono);font-size:11px;color:var(--dim);background:rgba(10,18,28,.7);
-    border:1px solid rgba(255,255,255,.09);border-radius:6px;cursor:pointer;-webkit-user-select:none;user-select:none;
-    touch-action:none;transition:.08s;display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1.1}
-  .pad button b{font-size:15px;color:var(--ink)}
-  .pad button:active,.pad button.on{background:rgba(55,224,208,.16);border-color:var(--cyan);color:var(--cyan)}
-  .pad button:active b,.pad button.on b{color:var(--cyan)}
-  .pad .u{grid-column:2;grid-row:1}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:2}.pad .r{grid-column:3;grid-row:2}
+  /* bottom timeline */
+  #timeline{position:absolute;bottom:14px;left:14px;right:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:11px 16px 13px;backdrop-filter:blur(8px);z-index:4}
+  .tl-head{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;margin-bottom:8px}
+  .tl-head .now{color:var(--cyan)} .tl-head .off{color:var(--ink);margin-left:auto}
+  .tl-wrap{position:relative}
+  #scrub{width:100%;-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;outline:none;
+    background:linear-gradient(90deg,#3a2a12 0%,#3a2a12 var(--nowpct,81%),#12283a var(--nowpct,81%),#12283a 100%)}
+  #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--cyan);
+    box-shadow:0 0 10px rgba(55,224,208,.6);cursor:grab}
+  #scrub::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px rgba(55,224,208,.6);cursor:grab}
+  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:5px;letter-spacing:.05em}
+  .tl-ctrl{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--dim);background:rgba(255,255,255,.04);
+    border:1px solid var(--line);border-radius:5px;padding:5px 9px}
+  .chip:hover{color:var(--ink);border-color:rgba(255,255,255,.2)}
+  .chip.on{color:var(--cyan);border-color:var(--cyan);background:rgba(55,224,208,.1)}
 
-  /* screens */
-  .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
-    background:radial-gradient(130% 100% at 50% 30%,rgba(6,11,20,.7),rgba(3,5,10,.94));pointer-events:auto;z-index:10}
-  .screen.hide{display:none}
-  .panel{width:min(560px,92vw);text-align:center}
-  .kick{font-family:var(--mono);font-size:10px;letter-spacing:.4em;color:var(--cyan);text-transform:uppercase}
-  h1{font-family:var(--sans);font-weight:800;font-size:clamp(30px,7vw,48px);letter-spacing:.04em;margin:10px 0 6px}
-  .sub{color:var(--dim);font-size:13.5px;line-height:1.55;max-width:46ch;margin:0 auto 22px}
-  .ships{display:flex;gap:10px;justify-content:center;margin-bottom:24px;flex-wrap:wrap}
-  .ship{pointer-events:auto;width:120px;padding:14px 12px;border:1px solid rgba(255,255,255,.1);border-radius:8px;
-    background:rgba(10,18,28,.6);cursor:pointer;transition:.14s;font-family:var(--mono)}
-  .ship:hover{transform:translateY(-3px);border-color:rgba(55,224,208,.5)}
-  .ship.sel{border-color:var(--cyan);background:rgba(55,224,208,.09);box-shadow:0 0 24px rgba(55,224,208,.14)}
-  .ship .ic{font-size:22px}
-  .ship .sn{font-family:var(--sans);font-weight:700;font-size:13px;margin:6px 0 3px;color:var(--ink)}
-  .ship .sd{font-size:9.5px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
-  .btn{pointer-events:auto;font-family:var(--mono);font-size:13px;letter-spacing:.18em;text-transform:uppercase;
-    color:var(--void);background:var(--cyan);border:none;border-radius:6px;padding:14px 34px;cursor:pointer;font-weight:700;
-    box-shadow:0 0 26px rgba(55,224,208,.3);transition:.14s}
-  .btn:hover{background:#5cebdc;box-shadow:0 0 34px rgba(55,224,208,.5)}
-  .btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
-  .keys{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:16px;letter-spacing:.06em}
-  .report{display:flex;gap:26px;justify-content:center;margin:6px 0 24px;font-family:var(--mono)}
-  .report .c .v{font-size:26px;font-weight:800;font-family:var(--sans)}
-  .report .c .k{font-size:9.5px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin-top:2px}
-  .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
-    font-family:var(--mono);color:var(--dim);font-size:12px;letter-spacing:.2em;z-index:20;background:var(--void)}
+  /* maneuver planner (opens from a conjunction) */
+  #mnv{position:absolute;right:14px;bottom:14px;width:300px;background:var(--panel);border:1px solid rgba(242,169,59,.4);
+    border-radius:10px;padding:13px 14px;backdrop-filter:blur(10px);z-index:6;display:none;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  #mnv.show{display:block}
+  #mnv .mh{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--amber);margin-bottom:2px}
+  #mnv .mt{font-family:var(--sans);font-weight:700;font-size:14px;margin-bottom:10px}
+  .sl{margin:9px 0}
+  .sl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:4px}
+  .sl label b{color:var(--ink)}
+  .sl input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.1);outline:none}
+  .sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--amber);cursor:grab}
+  .sl input[type=range]::-moz-range-thumb{width:13px;height:13px;border:none;border-radius:50%;background:var(--amber);cursor:grab}
+  .mnv-out{font-family:var(--mono);font-size:11px;margin:11px 0 4px;padding:9px 10px;border-radius:7px;background:rgba(255,255,255,.03);line-height:1.7}
+  .mnv-out .big{font-size:15px;font-weight:700}
+  .mnv-btns{display:flex;gap:7px;margin-top:11px}
+  .mbtn{flex:1;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--void);background:var(--amber);
+    border:none;border-radius:6px;padding:10px;font-weight:700}
+  .mbtn.exec{background:var(--go)} .mbtn.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+  .mbtn:disabled{opacity:.4;cursor:not-allowed}
+
+  /* screening overlay */
+  #screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+    background:radial-gradient(120% 100% at 50% 40%,rgba(6,11,20,.5),rgba(3,5,10,.85));z-index:8;font-family:var(--mono);
+    color:var(--dim);font-size:12px;letter-spacing:.16em}
+  #screen.hide{display:none}
   .spin{width:26px;height:26px;border:2px solid rgba(55,224,208,.25);border-top-color:var(--cyan);border-radius:50%;animation:s 1s linear infinite}
   @keyframes s{to{transform:rotate(360deg)}}
-  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+  @media (prefers-reduced-motion:reduce){.spin,#live i{animation:none}}
+
+  /* intro */
+  #intro{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;z-index:12;
+    background:radial-gradient(130% 100% at 50% 30%,rgba(6,11,20,.72),rgba(3,5,10,.95))}
+  #intro.hide{display:none}
+  .ipanel{width:min(600px,92vw);text-align:center}
+  .kick{font-family:var(--mono);font-size:10px;letter-spacing:.42em;color:var(--cyan);text-transform:uppercase}
+  h1{font-weight:800;font-size:clamp(30px,7vw,50px);letter-spacing:.045em;margin:10px 0 8px}
+  .isub{color:var(--dim);font-size:13.5px;line-height:1.65;max-width:52ch;margin:0 auto 22px}
+  .isub b{color:var(--ink);font-weight:600}
+  .go{font-family:var(--mono);font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--void);
+    background:var(--cyan);border:none;border-radius:6px;padding:14px 36px;font-weight:700;box-shadow:0 0 26px rgba(55,224,208,.3)}
+  .go:hover{background:#5cebdc}
+  .toast{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:9;font-family:var(--mono);font-size:12px;
+    padding:9px 16px;border-radius:8px;background:rgba(9,15,24,.92);border:1px solid var(--line);opacity:0;transition:.25s;pointer-events:none;max-width:80vw;text-align:center}
+  .toast.show{opacity:1}
+  @media(max-width:720px){#conj{width:220px}#tele{width:170px}#mnv{width:min(300px,90vw);left:14px;right:14px}}
 </style>
 </head>
 <body>
 <div id="app">
-  <div class="loading" id="loading"><div class="spin"></div><span>실제 궤도 데이터 로딩…</span></div>
-
-  <div class="hud tele" id="tele" style="display:none">
-    <div class="stat"><span class="lab">ALT</span><span class="num" id="alt">—</span></div>
-    <div class="stat"><span class="lab">Δv</span><span class="bar fuel" id="fuelBar"><i style="width:100%"></i></span></div>
-    <div class="stat"><span class="lab">HULL</span><span class="bar hull" id="hullBar"><i style="width:100%"></i></span></div>
-  </div>
-  <div class="hud meta" id="meta" style="display:none">
-    <div class="sc" id="score">0</div><div class="met" id="clock">T+00:00</div>
-  </div>
-  <div class="hud threat" id="threat"><i></i><span id="threatTxt">CONJUNCTION</span></div>
-
-  <div class="pad" id="pad" style="display:none">
-    <button class="u" data-d="pro"><b>▲</b>PRO</button>
-    <button class="l" data-d="radin"><b>◀</b>LOWER</button>
-    <button class="d" data-d="retro"><b>▼</b>RETRO</button>
-    <button class="r" data-d="radout"><b>▶</b>RAISE</button>
+  <div id="top">
+    <div class="brand">ORBIT GUARDIAN <small>CONJUNCTION OPS</small></div>
+    <div class="epoch"><span id="liveBadge"></span> &nbsp; <span id="epochTxt">—</span></div>
   </div>
 
-  <div class="screen" id="start">
-    <div class="panel">
-      <div class="kick">Low Earth Orbit · Live TLE</div>
-      <h1>ORBIT GUARDIAN</h1>
-      <p class="sub">실제 궤도를 도는 우주 물체들 사이에서, 당신의 위성을 살려내세요. 분사로 궤도를 바꿔 충돌을 피합니다.</p>
-      <div class="ships" id="ships"></div>
-      <button class="btn" id="launch">Launch</button>
-      <div class="keys">WASD · 방향키 · 화면 버튼</div>
+  <div id="tele">
+    <div class="th">MY SATELLITE</div>
+    <div class="sat-name" id="satName">GUARDIAN-1</div>
+    <div class="row"><span class="k">ALT</span><span class="v" id="tAlt">—</span></div>
+    <div class="row"><span class="k">인클리네이션</span><span class="v" id="tInc">—</span></div>
+    <div class="row"><span class="k">주기</span><span class="v" id="tPer">—</span></div>
+    <div class="row"><span class="k">속도</span><span class="v" id="tVel">—</span></div>
+    <div class="row"><span class="k">추적 물체</span><span class="v" id="tCat">—</span></div>
+    <div class="row"><span class="k">Δv 예산</span><span class="v" id="tFuel">—</span></div>
+  </div>
+
+  <div id="conj">
+    <div class="th">CONJUNCTION SCREENING · 향후 7일</div>
+    <div id="conjList"><div class="empty">스크리닝 대기…</div></div>
+  </div>
+
+  <div id="timeline">
+    <div class="tl-head">
+      <span>궤도 타임라인</span>
+      <span class="off" id="offTxt">T + 0.0 h</span>
+    </div>
+    <div class="tl-wrap">
+      <input type="range" id="scrub" min="-2592000" max="604800" value="0" step="60">
+      <div class="ticks"><span>−30일 (과거)</span><span class="now" style="position:absolute;left:81%;transform:translateX(-50%)">▲ 지금</span><span>+7일 (예측)</span></div>
+    </div>
+    <div class="tl-ctrl">
+      <button class="chip" data-jump="-2592000">−30d</button>
+      <button class="chip" data-jump="-604800">−7d</button>
+      <button class="chip" data-jump="-86400">−1d</button>
+      <button class="chip on" data-jump="0">지금</button>
+      <button class="chip" data-jump="86400">+1d</button>
+      <button class="chip" data-jump="604800">+7d</button>
+      <button class="chip" id="playBtn">▶ 재생</button>
+      <button class="chip" id="rescreenBtn">↻ 재스크리닝</button>
     </div>
   </div>
 
-  <div class="screen hide" id="over">
-    <div class="panel">
-      <div class="kick" id="overKick">Signal Lost</div>
-      <h1 id="overTitle">궤도 이탈</h1>
-      <div class="report">
-        <div class="c"><div class="v" id="rScore">0</div><div class="k">Score</div></div>
-        <div class="c"><div class="v" id="rTime">0s</div><div class="k">Survived</div></div>
-        <div class="c"><div class="v" id="rEvaded">0</div><div class="k">Evaded</div></div>
-      </div>
-      <button class="btn" id="again">Re-launch</button>
+  <div id="mnv">
+    <div class="mh">AVOIDANCE MANEUVER PLANNING</div>
+    <div class="mt" id="mnvTitle">회피 기동 계획</div>
+    <div class="sl">
+      <label>실행 시점 (TCA 이전)<b id="mnvTb">12.0 h</b></label>
+      <input type="range" id="mTb" min="1" max="72" value="12" step="0.5">
+    </div>
+    <div class="sl">
+      <label>프로그레이드 Δv<b id="mvP">0.00 m/s</b></label>
+      <input type="range" id="mP" min="-3" max="3" value="0" step="0.02">
+    </div>
+    <div class="sl">
+      <label>레이디얼 Δv<b id="mvR">0.00 m/s</b></label>
+      <input type="range" id="mR" min="-3" max="3" value="0" step="0.02">
+    </div>
+    <div class="sl">
+      <label>노멀(면외) Δv<b id="mvN">0.00 m/s</b></label>
+      <input type="range" id="mN" min="-3" max="3" value="0" step="0.02">
+    </div>
+    <div class="mnv-out" id="mnvOut">기동을 조정하면 재스크리닝 결과가 표시됩니다.</div>
+    <div class="mnv-btns">
+      <button class="mbtn ghost" id="mnvClose">닫기</button>
+      <button class="mbtn exec" id="mnvExec" disabled>기동 실행</button>
+    </div>
+  </div>
+
+  <div id="screen" class="hide"><div class="spin"></div><span id="screenTxt">CONJUNCTION SCREENING…</span></div>
+  <div class="toast" id="toast"></div>
+
+  <div id="intro">
+    <div class="ipanel">
+      <div class="kick">Real Orbital Data · Conjunction Assessment</div>
+      <h1>ORBIT GUARDIAN</h1>
+      <p class="isub">당신은 위성 관제사입니다. 실제 궤도 데이터로 <b>당신의 위성</b>과 수백 개의 실제 우주 물체 사이의 <b>충돌 위험</b>을 스크리닝하고, 필요하면 <b>회피 기동</b>을 명령해 위험을 해소하세요. 시간은 과거 30일로 되감고, 미래 7일의 접근을 예측합니다.</p>
+      <button class="go" id="begin">관제 시작</button>
     </div>
   </div>
 </div>
@@ -137,291 +207,387 @@
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
-const SCALE=1/50, EARTH_R=6371*SCALE, SIM_SPEED=55, MU=11300;
-const WARN=2.4, CRIT=1.1, HIT=0.62;
-const COL={debris:new THREE.Color(0xc98a5a),sat:new THREE.Color(0x37e0d0),station:new THREE.Color(0xffffff)};
-const SHIPS={
-  scout:{nm:'RECON',ic:'🛰️',sd:'AGILE',thrust:1.7,fuel:70,hull:60},
-  helios:{nm:'HELIOS',ic:'📡',sd:'BALANCED',thrust:1.25,fuel:100,hull:100},
-  aegis:{nm:'AEGIS',ic:'🛰',sd:'RUGGED',thrust:0.9,fuel:135,hull:150},
-};
-let chosen='helios';
+// ---------- constants (real units: km, km/s, s) ----------
+const MU=398600.4418, RE=6371.0;           // 지구 중력상수, 반경
+const RENDER=1/380;                          // km → three.js unit
+const R3=RE*RENDER;
+const FUTURE=7*86400, PAST=30*86400;         // 예측 7일 / 되감기 30일
+const D2R=Math.PI/180, R2D=180/Math.PI;
 
+// ---------- three.js ----------
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(1.5,devicePixelRatio||1));
-renderer.setSize(innerWidth,innerHeight);
-app.appendChild(renderer.domElement);
-const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0x04060b,0.0016);
-const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.5,4000);
-
-// lights
-scene.add(new THREE.AmbientLight(0x8fabc4,0.55));
-const sun=new THREE.DirectionalLight(0xfff4e6,1.5); sun.position.set(600,300,400); scene.add(sun);
+renderer.setPixelRatio(Math.min(1.6,devicePixelRatio||1));
+renderer.setSize(innerWidth,innerHeight); app.appendChild(renderer.domElement);
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x04060b,0.0009);
+const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,0.5,6000);
+scene.add(new THREE.AmbientLight(0x93b0c8,0.6));
+const sun=new THREE.DirectionalLight(0xfff3e4,1.45); sun.position.set(800,380,520); scene.add(sun);
 
 // Earth
-const earth=new THREE.Mesh(
-  new THREE.SphereGeometry(EARTH_R,48,48),
-  new THREE.MeshStandardMaterial({color:0x123a5c,emissive:0x081726,roughness:1,metalness:0,flatShading:false}));
+const earth=new THREE.Mesh(new THREE.SphereGeometry(R3,64,64),
+  new THREE.MeshStandardMaterial({color:0x113652,emissive:0x07141f,roughness:1,metalness:0}));
 scene.add(earth);
-// land blobs (cheap): a few darker patches via second sphere with vertex displacement skipped; use wireframe grid overlay
-const grid=new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.001,24,16),
-  new THREE.MeshBasicMaterial({color:0x1e5a72,wireframe:true,transparent:true,opacity:0.14}));
-scene.add(grid);
-// atmosphere glow
-const atmo=new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.03,48,48),
-  new THREE.MeshBasicMaterial({color:0x3aa0d8,transparent:true,opacity:0.10,side:THREE.BackSide}));
-scene.add(atmo);
-
-// starfield
-{
-  const N=1400,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
-  for(let i=0;i<N;i++){const r=1800,u=Math.random()*2-1,t=Math.random()*6.283,s=Math.sqrt(1-u*u);
+const grid=new THREE.Mesh(new THREE.SphereGeometry(R3*1.001,36,24),
+  new THREE.MeshBasicMaterial({color:0x1d5a72,wireframe:true,transparent:true,opacity:0.12})); scene.add(grid);
+const atmo=new THREE.Mesh(new THREE.SphereGeometry(R3*1.028,48,48),
+  new THREE.MeshBasicMaterial({color:0x3aa0d8,transparent:true,opacity:0.09,side:THREE.BackSide})); scene.add(atmo);
+{ const N=1600,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
+  for(let i=0;i<N;i++){const r=2600,u=Math.random()*2-1,t=Math.random()*6.283,s=Math.sqrt(1-u*u);
     p[i*3]=r*s*Math.cos(t);p[i*3+1]=r*u;p[i*3+2]=r*s*Math.sin(t);}
   g.setAttribute('position',new THREE.BufferAttribute(p,3));
-  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x9fb4c8,size:1.6,sizeAttenuation:false})));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x9fb4c8,size:1.5,sizeAttenuation:false}))); }
+
+// eci(km) → render vector (z-up ECI → three y-up)
+function toRender(x,y,z){ return new THREE.Vector3(x*RENDER, z*RENDER, -y*RENDER); }
+
+// ---------- catalog (real TLE via SGP4) with type-based 3D models ----------
+const TYPECOL={debris:0xc98a5a,sat:0x37e0d0,station:0xffffff};
+function typeGeo(t){
+  if(t==='station'){const g=new THREE.BoxGeometry(0.9,0.28,0.28); return g;}
+  if(t==='sat'){const g=new THREE.BoxGeometry(0.34,0.34,0.9); return g;}   // payload
+  // debris: irregular
+  const g=new THREE.IcosahedronGeometry(0.3,0); const pos=g.attributes.position;
+  for(let i=0;i<pos.count;i++){const f=0.55+Math.random()*0.9; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);} g.computeVertexNormals(); return g;
 }
-
-// space objects (real TLE via SGP4) — built after live data loads
-let OBJS=[], N=0, inst=null;
-const dummy=new THREE.Object3D();
-function buildObjects(data){
-  OBJS=(data||[]).map(o=>{
-    let rec=null; try{rec=satellite.twoline2satrec(o.l1,o.l2);}catch(e){}
-    return {rec,type:o.t,name:o.n,pos:new THREE.Vector3(),prev:new THREE.Vector3(),ok:false,near:0};
-  }).filter(o=>o.rec);
-  N=OBJS.length; if(!N)return;
-  const objGeo=new THREE.SphereGeometry(0.62,6,6);
-  const objMat=new THREE.MeshBasicMaterial(); // 흰색 기본 → instanceColor로 틴트
-  inst=new THREE.InstancedMesh(objGeo,objMat,N);
-  inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  inst.frustumCulled=false;
-  for(let i=0;i<N;i++)inst.setColorAt(i,COL[OBJS[i].type]||COL.debris);
-  scene.add(inst);
-}
-
-// player
-const player=new THREE.Group();
-{
-  const body=new THREE.Mesh(new THREE.ConeGeometry(0.5,1.6,8),
-    new THREE.MeshStandardMaterial({color:0xeaf6ff,emissive:0x24424f,roughness:.5,metalness:.3}));
-  body.rotation.x=Math.PI/2; player.add(body);
-  const pan=new THREE.Mesh(new THREE.BoxGeometry(2.6,0.06,0.7),
-    new THREE.MeshStandardMaterial({color:0x1f3f52,emissive:0x0d3540,emissiveIntensity:.6,roughness:.4,metalness:.5}));
-  player.add(pan);
-}
-scene.add(player);
-// player velocity marker ring
-const ring=new THREE.Mesh(new THREE.RingGeometry(1.7,1.85,32),
-  new THREE.MeshBasicMaterial({color:0x37e0d0,transparent:true,opacity:.35,side:THREE.DoubleSide}));
-scene.add(ring);
-
-// ---- state ----
-let state='menu', simDate0=null, tSim=0, elapsed=0, score=0, evaded=0;
-const P={pos:new THREE.Vector3(),vel:new THREE.Vector3(),fuel:1,fuelMax:1,hull:1,hullMax:1,thr:1,hitCd:0};
-const input={pro:false,retro:false,radout:false,radin:false};
-let propAcc=0, lerpT=0, threatLevel=0, contactSet=new Set();
-
-function seedPlayer(){
-  const s=SHIPS[chosen], r0=EARTH_R+ (800*SCALE); // ~800km: 데브리 밴드(Fengyun/Cosmos/Iridium) 한복판
-  P.pos.set(r0,0,0);
-  const v=Math.sqrt(MU/r0);
-  P.vel.set(0,v*0.9,v*0.42); // slightly inclined orbit → crosses many real planes
-  P.fuel=P.fuelMax=s.fuel/100; P.hull=P.hullMax=s.hull/100; P.thr=1.4*s.thrust; P.hitCd=0;
-  score=0;evaded=0;elapsed=0;threatLevel=0;contactSet.clear();
-  simDate0=new Date();
-}
-
-// SGP4 propagate all objects to sim time (throttled), store into prev/pos
-function propagate(){
-  const d=new Date(simDate0.getTime()+tSim*1000*SIM_SPEED);
-  for(let i=0;i<N;i++){
-    const o=OBJS[i]; o.prev.copy(o.pos);
-    try{
-      const pv=satellite.propagate(o.rec,d);
-      if(pv&&pv.position){o.pos.set(pv.position.x*SCALE,pv.position.z*SCALE,-pv.position.y*SCALE);o.ok=true;}
-      else o.ok=false;
-    }catch(e){o.ok=false;}
-    if(!o.wasOk){o.prev.copy(o.pos);} o.wasOk=o.ok;
+let CAT=[], instByType={};
+function buildCatalog(data){
+  CAT=(data||[]).map(o=>{let rec=null;try{rec=satellite.twoline2satrec(o.l1,o.l2);}catch(e){}
+    return {rec,type:o.t,name:o.n,r:new THREE.Vector3(),ok:false,alt:0};}).filter(o=>o.rec);
+  // precompute mean altitude for filtering (from mean motion)
+  for(const o of CAT){ const n=o.rec.no*(1440/(2*Math.PI))/1440; const nrev=o.rec.no; // rad/min
+    const a=Math.cbrt(MU/Math.pow(nrev/60,2)); o.alt=a-RE; o.a=a; o.ecc=o.rec.ecco; }
+  const byType={station:[],sat:[],debris:[]};
+  CAT.forEach((o,i)=>{o.i=i; (byType[o.type]||byType.debris).push(i);});
+  for(const t of ['debris','sat','station']){
+    const ids=byType[t]||[]; if(!ids.length)continue;
+    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[t],emissive:new THREE.Color(TYPECOL[t]).multiplyScalar(0.18),roughness:.55,metalness:.35});
+    const im=new THREE.InstancedMesh(typeGeo(t),mat,ids.length); im.frustumCulled=false;
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    instByType[t]={mesh:im,ids}; scene.add(im);
   }
 }
-
-const _m=new THREE.Vector3();
-function updateInstances(a){
-  let warn=0,crit=0;
-  for(let i=0;i<N;i++){
-    const o=OBJS[i]; if(!o.ok){dummy.position.set(0,-99999,0);dummy.scale.setScalar(0.001);}
-    else{
-      _m.copy(o.prev).lerp(o.pos,a);
-      dummy.position.copy(_m);
-      const dist=_m.distanceTo(P.pos);
-      let sc=1, nearLvl=0;
-      if(dist<WARN){nearLvl= dist<CRIT?2:1; sc = dist<CRIT?2.1:1.5; if(nearLvl===2)crit++; else warn++;}
-      if(nearLvl!==o.near){ inst.setColorAt(i, nearLvl===2?new THREE.Color(0xff4d5e):nearLvl===1?new THREE.Color(0xf2a93b):(COL[o.type]||COL.debris)); o.near=nearLvl; inst.instanceColor.needsUpdate=true;}
-      dummy.scale.setScalar(sc);
+const _d=new THREE.Object3D();
+function propagateCatalog(date){
+  for(const o of CAT){ try{const pv=satellite.propagate(o.rec,date);
+    if(pv&&pv.position){o.r.set(pv.position.x,pv.position.y,pv.position.z);o.v=pv.velocity;o.ok=true;} else o.ok=false;
+  }catch(e){o.ok=false;} }
+}
+function renderCatalog(highlightIdx){
+  for(const t in instByType){ const {mesh,ids}=instByType[t];
+    for(let k=0;k<ids.length;k++){ const o=CAT[ids[k]];
+      if(!o.ok){_d.position.set(0,-1e5,0);_d.scale.setScalar(.0001);}
+      else{const v=toRender(o.r.x,o.r.y,o.r.z);_d.position.copy(v);
+        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?2.6:1);
+        _d.rotation.set(o.i*0.7,o.i*1.3,0);}
+      _d.updateMatrix(); mesh.setMatrixAt(k,_d.matrix);
+      mesh.setColorAt(k,new THREE.Color(o.i===highlightIdx?0xff4d5e:TYPECOL[t]));
     }
-    dummy.rotation.set(0,0,0); dummy.updateMatrix();
-    inst.setMatrixAt(i,dummy.matrix);
+    mesh.instanceMatrix.needsUpdate=true; if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
   }
-  inst.instanceMatrix.needsUpdate=true;
-  threatLevel = crit?2:warn?1:0;
-  return {warn,crit};
 }
 
-// collision (check against interpolated near objects only, at full rate uses pos)
-function checkCollide(){
-  if(P.hitCd>0)return;
-  for(let i=0;i<N;i++){const o=OBJS[i]; if(!o.ok||o.near===0)continue;
-    if(o.pos.distanceTo(P.pos)<HIT){ P.hull-=0.34; P.hitCd=1.0;
-      if(!contactSet.has(i)){/* new hit */}
-      return;
+// ---------- MY satellite: state-vector + universal-variable Kepler (two-body) ----------
+function stumpC(z){ if(z>1e-6)return (1-Math.cos(Math.sqrt(z)))/z; if(z<-1e-6){const s=Math.sqrt(-z);return (Math.cosh(s)-1)/(-z);} return 0.5; }
+function stumpS(z){ if(z>1e-6){const s=Math.sqrt(z);return (s-Math.sin(s))/(s*s*s);} if(z<-1e-6){const s=Math.sqrt(-z);return (Math.sinh(s)-s)/(s*s*s);} return 1/6; }
+// propagate (r0,v0) by dt seconds → {r,v} (arrays, km / km/s)
+function kepler(r0,v0,dt){
+  const r0m=Math.hypot(r0[0],r0[1],r0[2]);
+  const v0m=Math.hypot(v0[0],v0[1],v0[2]);
+  const vr0=(r0[0]*v0[0]+r0[1]*v0[1]+r0[2]*v0[2])/r0m;
+  const alpha=2/r0m - v0m*v0m/MU;
+  let x=Math.sqrt(MU)*Math.abs(alpha)*dt;
+  const sMU=Math.sqrt(MU);
+  for(let it=0;it<60;it++){
+    const z=alpha*x*x, C=stumpC(z), S=stumpS(z);
+    const F=r0m*vr0/sMU*x*x*C + (1-alpha*r0m)*x*x*x*S + r0m*x - sMU*dt;
+    const dF=r0m*vr0/sMU*x*(1-alpha*x*x*S) + (1-alpha*r0m)*x*x*C + r0m;
+    const dx=F/dF; x-=dx; if(Math.abs(dx)<1e-8)break;
+  }
+  const z=alpha*x*x, C=stumpC(z), S=stumpS(z);
+  const f=1 - x*x/r0m*C, g=dt - x*x*x/sMU*S;
+  const r=[f*r0[0]+g*v0[0], f*r0[1]+g*v0[1], f*r0[2]+g*v0[2]];
+  const rm=Math.hypot(r[0],r[1],r[2]);
+  const fd=sMU/(rm*r0m)*(alpha*x*x*x*S - x), gd=1 - x*x/rm*C;
+  const v=[fd*r0[0]+gd*v0[0], fd*r0[1]+gd*v0[1], fd*r0[2]+gd*v0[2]];
+  return {r,v};
+}
+// RTN basis at state (r,v): radial, transverse(in-plane ⟂r), normal(orbit)
+function rtn(r,v){
+  const R=[...r], rm=Math.hypot(...r); R[0]/=rm;R[1]/=rm;R[2]/=rm;
+  let N=[r[1]*v[2]-r[2]*v[1], r[2]*v[0]-r[0]*v[2], r[0]*v[1]-r[1]*v[0]]; const nm=Math.hypot(...N); N[0]/=nm;N[1]/=nm;N[2]/=nm;
+  const T=[N[1]*R[2]-N[2]*R[1], N[2]*R[0]-N[0]*R[2], N[0]*R[1]-N[1]*R[0]]; // N×R = transverse(prograde-ish)
+  return {R,T,N};
+}
+
+let MY=null;   // {r0,v0,epoch(ms), name, dvBudget, dvUsed}
+let PLAN=null; // planned maneuver trajectory {r0,v0,epoch, burnMs}
+function initMySat(){
+  // seed inside the Cosmos-2251 / Iridium-33 debris band (~790km, ~74° inc) → 실제 근접 이벤트 발생
+  const alt=790, a=RE+alt, r=[a,0,0];
+  const vc=Math.sqrt(MU/a), inc=74*D2R;
+  const v=[0, vc*Math.cos(inc), vc*Math.sin(inc)];
+  // rotate a bit so plane isn't axis-aligned
+  MY={r0:r,v0:v,epoch:Date.now(),name:'GUARDIAN-1',dvBudget:40,dvUsed:0};
+  PLAN=null;
+}
+function myStateAt(ms){ // ms = absolute epoch time
+  const src=PLAN||MY; const dt=(ms-src.epoch)/1000;
+  return kepler(src.r0,src.v0,dt);
+}
+// orbit line (sample one period)
+let orbitLine=null, planLine=null, mySat=null, myRing=null;
+function makeSat(){ const g=new THREE.Group();
+  const b=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.5,10),new THREE.MeshStandardMaterial({color:0xeaf6ff,emissive:0x24424f,roughness:.4,metalness:.4}));
+  b.rotation.z=Math.PI/2; g.add(b);
+  const p=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.9,0.32),new THREE.MeshStandardMaterial({color:0x2a5266,emissive:0x0d3540,emissiveIntensity:.7,roughness:.4,metalness:.5})); g.add(p);
+  return g; }
+function buildMyVisuals(){
+  mySat=makeSat(); scene.add(mySat);
+  myRing=new THREE.Mesh(new THREE.RingGeometry(0.55,0.62,32),new THREE.MeshBasicMaterial({color:0x37e0d0,transparent:true,opacity:.5,side:THREE.DoubleSide})); scene.add(myRing);
+  orbitLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x37e0d0,transparent:true,opacity:.5})); scene.add(orbitLine);
+  planLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x41e08a,transparent:true,opacity:.7})); planLine.visible=false; scene.add(planLine);
+}
+function sampleOrbit(src,ms0){
+  const a=(2/Math.hypot(...src.r0) - (src.v0[0]**2+src.v0[1]**2+src.v0[2]**2)/MU); const sma=1/a;
+  const per=2*Math.PI*Math.sqrt(sma*sma*sma/MU);
+  const pts=[]; const nrm=120;
+  for(let k=0;k<=nrm;k++){ const dt=(k/nrm)*per; const st=kepler(src.r0,src.v0,(ms0-src.epoch)/1000+dt);
+    pts.push(toRender(st.r[0],st.r[1],st.r[2])); }
+  return pts;
+}
+function updateOrbitLines(nowMs){
+  orbitLine.geometry.setFromPoints(sampleOrbit(MY,nowMs));
+  if(PLAN){planLine.geometry.setFromPoints(sampleOrbit(PLAN,nowMs));planLine.visible=true;} else planLine.visible=false;
+}
+
+// ---------- time control ----------
+let tOffset=0;         // seconds relative to "launch now"
+let launchMs=Date.now();
+let playing=false, playRate=0;
+function curMs(){ return launchMs + tOffset*1000; }
+
+// ---------- conjunction screening ----------
+let CONJ=[], selConj=null;
+function altFilter(){ // objects whose orbit could reach my altitude band
+  const myA=Math.hypot(...MY.r0), lo=myA-160, hi=myA+160;
+  return CAT.filter(o=>{ if(!o.a)return false; const per=o.a*(1-o.ecc), apo=o.a*(1+o.ecc); return apo>=lo && per<=hi; });
+}
+async function screenConjunctions(useSrc){
+  const src=useSrc||MY;
+  document.getElementById('screen').classList.remove('hide');
+  document.getElementById('screenTxt').textContent='CONJUNCTION SCREENING…';
+  await new Promise(r=>setTimeout(r,30));
+  const cand=altFilter();
+  const t0=launchMs; const stepC=20; // 20s coarse (ranking)
+  const coarse=[];
+  const chunk=6;
+  for(let ci=0;ci<cand.length;ci+=chunk){
+    for(let cj=ci;cj<Math.min(ci+chunk,cand.length);cj++){
+      const o=cand[cj]; let best={d:1e9,t:0};
+      for(let ts=0;ts<=FUTURE;ts+=stepC){
+        const ms=t0+ts*1000;
+        let pv; try{pv=satellite.propagate(o.rec,new Date(ms));}catch(e){continue;} if(!pv||!pv.position)continue;
+        const my=myStateAtSrc(src,ms);
+        const d=Math.hypot(pv.position.x-my.r[0],pv.position.y-my.r[1],pv.position.z-my.r[2]);
+        if(d<best.d)best={d,t:ts};
+      }
+      if(best.d<120) coarse.push({obj:o,miss:best.d,tca:best.t});
     }
+    document.getElementById('screenTxt').textContent='CONJUNCTION SCREENING… '+Math.round(100*Math.min(1,(ci+chunk)/cand.length))+'%';
+    await new Promise(r=>requestAnimationFrame(r));
   }
-}
-
-const gvec=new THREE.Vector3(), tvec=new THREE.Vector3(), radial=new THREE.Vector3(), prograde=new THREE.Vector3();
-function physics(dt){
-  const sub=2, h=dt/sub;
-  for(let k=0;k<sub;k++){
-    const r=P.pos.length();
-    gvec.copy(P.pos).multiplyScalar(-MU/(r*r*r));
-    radial.copy(P.pos).normalize(); prograde.copy(P.vel).normalize();
-    tvec.set(0,0,0);
-    const firing=(input.pro||input.retro||input.radout||input.radin)&&P.fuel>0;
-    if(firing){
-      if(input.pro)tvec.addScaledVector(prograde,1);
-      if(input.retro)tvec.addScaledVector(prograde,-1);
-      if(input.radout)tvec.addScaledVector(radial,1);
-      if(input.radin)tvec.addScaledVector(radial,-1);
-      if(tvec.lengthSq()>0){tvec.normalize().multiplyScalar(P.thr);
-        P.vel.addScaledVector(tvec,h); P.fuel=Math.max(0,P.fuel-0.11*h);}
-    } else if(P.fuel<P.fuelMax) P.fuel=Math.min(P.fuelMax,P.fuel+0.03*h);
-    P.vel.addScaledVector(gvec,h);
-    P.pos.addScaledVector(P.vel,h);
+  // refine the closest 12 at 0.5s over ±150s for accurate miss/TCA
+  coarse.sort((a,b)=>a.miss-b.miss);
+  const top=coarse.slice(0,12);
+  for(const c of top){
+    let ref={d:c.miss,t:c.tca};
+    for(let ts=Math.max(0,c.tca-150);ts<=Math.min(FUTURE,c.tca+150);ts+=0.5){
+      const ms=t0+ts*1000; let pv; try{pv=satellite.propagate(c.obj.rec,new Date(ms));}catch(e){continue;} if(!pv||!pv.position)continue;
+      const my=myStateAtSrc(src,ms);
+      const d=Math.hypot(pv.position.x-my.r[0],pv.position.y-my.r[1],pv.position.z-my.r[2]);
+      if(d<ref.d)ref={d,t:ts};
+    }
+    c.miss=ref.d; c.tca=ref.t;
   }
-  if(P.hitCd>0)P.hitCd-=dt;
-  const r=P.pos.length();
-  if(r<EARTH_R+3) return end('DEORBIT','대기권 재진입 — 위성 소실');
-  if(r>EARTH_R*4.2) return end('LOST','궤도 이탈 — 심우주로 소실');
-  if(P.hull<=0) return end('DESTROYED','연쇄 충돌 — 구조 붕괴');
-  score+=dt*20;
+  top.sort((a,b)=>a.miss-b.miss);
+  document.getElementById('screen').classList.add('hide');
+  return top.slice(0,8);
+}
+function myStateAtSrc(src,ms){ const dt=(ms-src.epoch)/1000; return kepler(src.r0,src.v0,dt); }
+
+function riskClass(m){ return m<1?'risk-hi':m<5?'risk-md':'risk-lo'; }
+function riskLabel(m){ return m<1?'높음':m<5?'중간':'낮음'; }
+function fmtT(ts){ const h=ts/3600; if(h<48)return h.toFixed(1)+'h'; return (h/24).toFixed(1)+'d'; }
+function renderConjList(){
+  const el=document.getElementById('conjList');
+  if(!CONJ.length){el.innerHTML='<div class="empty">향후 7일 내<br>임계 접근 없음 ✓</div>';return;}
+  el.innerHTML=CONJ.map((c,i)=>`
+    <div class="cj ${riskClass(c.miss)} ${selConj===i?'sel':''}" data-i="${i}">
+      <div class="nm"><span class="dot" style="background:#${TYPECOL[c.obj.type].toString(16).padStart(6,'0')}"></span>${c.obj.name}</div>
+      <div class="miss">최근접 <b>${c.miss<1?(c.miss*1000).toFixed(0)+' m':c.miss.toFixed(2)+' km'}</b> · 위험 ${riskLabel(c.miss)}</div>
+      <div class="meta"><span>TCA T+${fmtT(c.tca)}</span><span>${c.obj.type.toUpperCase()}</span></div>
+    </div>`).join('');
+  el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
+}
+function selectConj(i){ selConj=i; renderConjList(); const c=CONJ[i];
+  // jump time near TCA and open maneuver planner
+  setOffset(c.tca- 900); openManeuver(c);
 }
 
-function end(kick,title){
-  state='over';
-  document.getElementById('over').classList.remove('hide');
-  document.getElementById('pad').style.display='none';
-  document.getElementById('overKick').textContent=kick;
-  document.getElementById('overTitle').textContent=title;
-  document.getElementById('rScore').textContent=Math.round(score).toLocaleString();
-  document.getElementById('rTime').textContent=Math.floor(elapsed)+'s';
-  document.getElementById('rEvaded').textContent=evaded;
+// ---------- maneuver planner ----------
+function openManeuver(c){
+  const m=document.getElementById('mnv'); m.classList.add('show');
+  document.getElementById('mnvTitle').textContent=c.obj.name+' 회피';
+  const maxTb=Math.max(1,Math.min(72,c.tca/3600-0.2));
+  const tb=document.getElementById('mTb'); tb.max=maxTb.toFixed(1); tb.value=Math.min(12,maxTb).toFixed(1);
+  document.getElementById('mP').value=0;document.getElementById('mR').value=0;document.getElementById('mN').value=0;
+  updateManeuver();
+}
+function closeManeuver(){ document.getElementById('mnv').classList.remove('show'); planLine.visible=false; PLAN=null; }
+function currentPlanFrom(c){
+  const tbH=+document.getElementById('mTb').value; const burnMs=launchMs+(c.tca-tbH*3600)*1000;
+  const st=myStateAtSrc(MY,burnMs); // state at burn
+  const {R,T,N}=rtn(st.r,st.v);
+  const dp=+document.getElementById('mP').value/1000, dr=+document.getElementById('mR').value/1000, dn=+document.getElementById('mN').value/1000; // m/s→km/s
+  const v2=[st.v[0]+T[0]*dp+R[0]*dr+N[0]*dn, st.v[1]+T[1]*dp+R[1]*dr+N[1]*dn, st.v[2]+T[2]*dp+R[2]*dr+N[2]*dn];
+  return {r0:st.r,v0:v2,epoch:burnMs,dv:Math.hypot(dp,dr,dn)*1000,burnMs};
+}
+let _mnvTimer=null;
+function updateManeuver(){
+  if(selConj===null)return; const c=CONJ[selConj];
+  document.getElementById('mnvTb').textContent=(+document.getElementById('mTb').value).toFixed(1)+' h';
+  document.getElementById('mvP').textContent=(+document.getElementById('mP').value).toFixed(2)+' m/s';
+  document.getElementById('mvR').textContent=(+document.getElementById('mR').value).toFixed(2)+' m/s';
+  document.getElementById('mvN').textContent=(+document.getElementById('mN').value).toFixed(2)+' m/s';
+  const plan=currentPlanFrom(c); PLAN={r0:plan.r0,v0:plan.v0,epoch:plan.epoch}; updateOrbitLines(curMs());
+  // recompute miss distance vs that object around TCA with planned trajectory
+  clearTimeout(_mnvTimer);
+  _mnvTimer=setTimeout(()=>{
+    let best=1e9,bt=c.tca;
+    for(let ts=Math.max(0,c.tca-600);ts<=c.tca+600;ts+=2){
+      const ms=launchMs+ts*1000;
+      let pv; try{pv=satellite.propagate(c.obj.rec,new Date(ms));}catch(e){continue;} if(!pv||!pv.position)continue;
+      const my=myStateAtSrc(plan.burnMs>ms?MY:PLAN, ms); // 기동 전엔 원궤도, 후엔 기동궤도
+      const d=Math.hypot(pv.position.x-my.r[0],pv.position.y-my.r[1],pv.position.z-my.r[2]);
+      if(d<best){best=d;bt=ts;}
+    }
+    const fmt=x=>x<1?(x*1000).toFixed(0)+' m':x.toFixed(2)+' km';
+    const safe=best>=10, warn=best>=5&&best<10;
+    const col=safe?'var(--go)':warn?'var(--amber)':'var(--red)';
+    const dv=plan.dv, avail=MY.dvBudget-MY.dvUsed, over=dv>avail;
+    const improved=best>c.miss;
+    document.getElementById('mnvOut').innerHTML=
+      `최근접 <b>${fmt(c.miss)}</b> → <span class="big" style="color:${col}">${fmt(best)}</span> `+
+      `<span style="color:${col}">${safe?'✓ 안전 확보':warn?'△ 주의':improved?'△ 개선':'✕ 미개선'}</span><br>`+
+      `Δv 사용 <b>${dv.toFixed(2)} m/s</b> / 잔여 ${avail.toFixed(1)} m/s ${over?'<span style="color:var(--red)">초과!</span>':''}`;
+    const eb=document.getElementById('mnvExec'); eb.disabled=(dv<0.02)||over||!improved;
+  },120);
+}
+function execManeuver(){
+  if(selConj===null||!PLAN)return; const c=CONJ[selConj];
+  const plan=currentPlanFrom(c);
+  // commit: MY becomes the maneuvered orbit from burn epoch
+  MY={r0:plan.r0,v0:plan.v0,epoch:plan.epoch,name:MY.name,dvBudget:MY.dvBudget,dvUsed:MY.dvUsed+plan.dv};
+  PLAN=null; closeManeuver();
+  toast(`기동 실행 · Δv ${plan.dv.toFixed(0)} m/s 소모. 새 CDM 수신 중…`);
+  // re-screen with the committed orbit → show updated risk
+  setTimeout(async()=>{ CONJ=await screenConjunctions(MY); selConj=null; renderConjList();
+    toast('재스크리닝 완료 — 갱신된 접근 목록 확인');
+  },500);
 }
 
-// ---- camera follow ----
-const camPos=new THREE.Vector3(), camTgt=new THREE.Vector3(), _r=new THREE.Vector3(),_p=new THREE.Vector3();
-function updateCamera(dt){
-  _r.copy(P.pos).normalize(); _p.copy(P.vel).normalize();
-  camPos.copy(P.pos).addScaledVector(_r,7).addScaledVector(_p,-11);
-  camera.up.copy(_r);
-  camera.position.lerp(camPos, Math.min(1,dt*4));
-  camTgt.copy(P.pos).addScaledVector(_p,3);
-  camera.lookAt(camTgt);
+// ---------- HUD / telemetry ----------
+function fmtNum(n,d=0){return n.toLocaleString(undefined,{maximumFractionDigits:d});}
+function updateTele(nowMs){
+  if(!MY)return;
+  const st=myStateAt(nowMs); const rm=Math.hypot(...st.r); const vm=Math.hypot(...st.v);
+  const a=1/(2/rm - vm*vm/MU); const per=2*Math.PI*Math.sqrt(a*a*a/MU)/60;
+  // inclination from ang. momentum
+  const h=[st.r[1]*st.v[2]-st.r[2]*st.v[1], st.r[2]*st.v[0]-st.r[0]*st.v[2], st.r[0]*st.v[1]-st.r[1]*st.v[0]];
+  const inc=Math.acos(h[2]/Math.hypot(...h))*R2D;
+  document.getElementById('tAlt').textContent=fmtNum(rm-RE)+' km';
+  document.getElementById('tInc').textContent=inc.toFixed(1)+'°';
+  document.getElementById('tPer').textContent=per.toFixed(1)+' min';
+  document.getElementById('tVel').textContent=vm.toFixed(2)+' km/s';
+  document.getElementById('tCat').textContent=fmtNum(CAT.length)+' 개';
+  document.getElementById('tFuel').textContent=(MY.dvBudget-MY.dvUsed).toFixed(0)+' m/s';
+  const off=tOffset/3600;
+  document.getElementById('offTxt').textContent=(off>=0?'T + ':'T − ')+Math.abs(off).toFixed(1)+' h';
+  const dd=new Date(nowMs);
+  document.getElementById('epochTxt').textContent=dd.toISOString().replace('T',' ').slice(0,19)+' UTC';
+  document.getElementById('liveBadge').innerHTML= Math.abs(tOffset)<120?'<span id="live"><i></i>LIVE</span>':'<span style="color:var(--amber);font-family:var(--mono);font-size:10px;letter-spacing:.14em">'+(tOffset<0?'HISTORY':'PREDICT')+'</span>';
 }
 
-// ---- HUD ----
-let hudAcc=0;
-function hud(dt){
-  hudAcc+=dt; if(hudAcc<0.12)return; hudAcc=0;
-  const altKm=Math.round((P.pos.length()-EARTH_R)/SCALE);
-  document.getElementById('alt').textContent=altKm.toLocaleString()+' km';
-  const fp=Math.max(0,P.fuel/P.fuelMax), hp=Math.max(0,P.hull/P.hullMax);
-  const fb=document.getElementById('fuelBar'), hb=document.getElementById('hullBar');
-  fb.firstElementChild.style.width=(fp*100)+'%'; hb.firstElementChild.style.width=(hp*100)+'%';
-  fb.classList.toggle('low',fp<.4&&fp>=.18); fb.classList.toggle('crit',fp<.18);
-  hb.classList.toggle('low',hp<.5&&hp>=.25); hb.classList.toggle('crit',hp<.25);
-  document.getElementById('score').textContent=Math.round(score).toLocaleString();
-  const m=Math.floor(elapsed/60),s=Math.floor(elapsed%60);
-  document.getElementById('clock').textContent='T+'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-  const th=document.getElementById('threat');
-  th.className='hud threat'+(threatLevel===2?' on crit':threatLevel===1?' on':'');
-  document.getElementById('threatTxt').textContent=threatLevel===2?'COLLISION IMMINENT':'CONJUNCTION WARNING';
+// ---------- camera ----------
+let camDist=R3*3.2, camTheta=0.6, camPhi=1.0, dragging=false, lastX,lastY, follow=true;
+const camTarget=new THREE.Vector3();
+function updateCamera(){
+  let tgt=new THREE.Vector3(0,0,0);
+  if(follow&&MY){ const st=myStateAt(curMs()); tgt=toRender(st.r[0],st.r[1],st.r[2]); }
+  camTarget.lerp(tgt,0.12);
+  const x=camDist*Math.sin(camPhi)*Math.cos(camTheta), y=camDist*Math.cos(camPhi), z=camDist*Math.sin(camPhi)*Math.sin(camTheta);
+  camera.position.set(camTarget.x+x,camTarget.y+y,camTarget.z+z); camera.lookAt(camTarget);
 }
+renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointerup',()=>dragging=false);
+addEventListener('pointermove',e=>{if(!dragging)return;camTheta-=(e.clientX-lastX)*0.005;camPhi=Math.max(0.15,Math.min(3.0,camPhi-(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math.max(R3*1.4,Math.min(R3*9,camDist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
 
-// ---- loop ----
-let last=performance.now();
+// ---------- render loop ----------
+let last=performance.now(), catAcc=0, catDate=null;
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
-  if(state==='play'){
-    elapsed+=dt; tSim+=dt; propAcc+=dt;
-    physics(dt);
-    if(state==='play'){
-      // throttled SGP4 (4 Hz)
-      if(propAcc>=0.25){propagate(); propAcc=0; lerpT=0;}
-      lerpT=Math.min(1,lerpT+dt/0.25);
-      const cnt=updateInstances(lerpT);
-      checkCollide();
-      // count evaded: objects that left CRIT band
-      updateCamera(dt); hud(dt);
-    }
+  if(playing){ tOffset=Math.min(FUTURE,Math.max(-PAST, tOffset+dt*playRate)); document.getElementById('scrub').value=tOffset; }
+  const nowMs=curMs();
+  // throttle SGP4 catalog (6 Hz)
+  catAcc+=dt;
+  if(catAcc>=0.16||!catDate){ catAcc=0; propagateCatalog(new Date(nowMs)); catDate=nowMs;
+    renderCatalog(selConj!==null?CONJ[selConj].obj.i:-1); }
+  // my sat
+  if(mySat){ const st=myStateAt(nowMs); const v=toRender(st.r[0],st.r[1],st.r[2]);
+    mySat.position.copy(v); myRing.position.copy(v);
+    const vv=toRender(st.r[0]+st.v[0],st.r[1]+st.v[1],st.r[2]+st.v[2]); mySat.lookAt(vv); myRing.lookAt(vv);
   }
-  earth.rotation.y+=dt*0.02; grid.rotation.y+=dt*0.02;
-  // orient player to velocity
-  if(P.vel.lengthSq()>0){_p.copy(P.pos).add(P.vel); player.position.copy(P.pos); player.lookAt(_p);
-    ring.position.copy(P.pos); ring.lookAt(_p.copy(P.pos).addScaledVector(radial.copy(P.pos).normalize(),1));}
-  renderer.render(scene,camera);
-  requestAnimationFrame(frame);
+  earth.rotation.y+=dt*0.015; grid.rotation.y+=dt*0.015;
+  updateCamera(); updateTele(nowMs);
+  renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 
-// ---- flow ----
-function launch(){
-  document.getElementById('start').classList.add('hide');
-  document.getElementById('over').classList.add('hide');
-  document.getElementById('tele').style.display='';
-  document.getElementById('meta').style.display='';
-  document.getElementById('pad').style.display='';
-  seedPlayer(); tSim=0; propAcc=1; propagate(); for(const o of OBJS)o.prev.copy(o.pos);
-  camera.position.copy(P.pos).multiplyScalar(1.3);
-  state='play';
-}
-document.getElementById('launch').addEventListener('click',launch);
-document.getElementById('again').addEventListener('click',launch);
-
-// ship picker
-{
-  const w=document.getElementById('ships');
-  w.innerHTML=Object.entries(SHIPS).map(([k,s])=>
-    `<div class="ship ${k===chosen?'sel':''}" data-k="${k}"><div class="ic">${s.ic}</div><div class="sn">${s.nm}</div><div class="sd">${s.sd}</div></div>`).join('');
-  w.querySelectorAll('.ship').forEach(b=>b.addEventListener('click',()=>{
-    chosen=b.dataset.k; w.querySelectorAll('.ship').forEach(x=>x.classList.remove('sel')); b.classList.add('sel');}));
-}
-// input
-const KEY={KeyW:'pro',ArrowUp:'pro',KeyS:'retro',ArrowDown:'retro',KeyD:'radout',ArrowRight:'radout',KeyA:'radin',ArrowLeft:'radin'};
-addEventListener('keydown',e=>{if((e.code==='Enter'||e.code==='Space')&&state!=='play'){launch();return;}
-  const d=KEY[e.code];if(d){input[d]=true;e.preventDefault();}});
-addEventListener('keyup',e=>{const d=KEY[e.code];if(d)input[d]=false;});
-document.querySelectorAll('#pad button').forEach(b=>{const d=b.dataset.d;
-  const on=e=>{e.preventDefault();input[d]=true;b.classList.add('on');};
-  const off=e=>{e.preventDefault();input[d]=false;b.classList.remove('on');};
-  b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);b.addEventListener('pointerleave',off);b.addEventListener('pointercancel',off);});
-
+// ---------- UI wiring ----------
+function setOffset(s){ tOffset=Math.min(FUTURE,Math.max(-PAST,s)); document.getElementById('scrub').value=tOffset;
+  document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.classList.toggle('on',+c.dataset.jump===Math.round(tOffset)));
+  updateOrbitLines(curMs()); }
+document.getElementById('scrub').addEventListener('input',e=>{playing=false;document.getElementById('playBtn').classList.remove('on');document.getElementById('playBtn').textContent='▶ 재생';setOffset(+e.target.value);});
+document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.addEventListener('click',()=>{playing=false;setOffset(+c.dataset.jump);}));
+document.getElementById('playBtn').addEventListener('click',e=>{playing=!playing;playRate=600;e.target.classList.toggle('on',playing);e.target.textContent=playing?'⏸ 정지':'▶ 재생';});
+document.getElementById('rescreenBtn').addEventListener('click',async()=>{CONJ=await screenConjunctions(MY);selConj=null;renderConjList();toast('스크리닝 완료 — '+CONJ.length+'건 접근 탐지');});
+['mTb','mP','mR','mN'].forEach(id=>document.getElementById(id).addEventListener('input',updateManeuver));
+document.getElementById('mnvClose').addEventListener('click',closeManeuver);
+document.getElementById('mnvExec').addEventListener('click',execManeuver);
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+let _tt; function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),3200);}
 
-// boot — LIVE TLE from Vercel serverless /api/tle, fallback to bundled snapshot
+// nowpct for scrub gradient (0 offset position)
+(function(){const pct=(PAST/(PAST+FUTURE))*100;document.getElementById('scrub').style.setProperty('--nowpct',pct+'%');})();
+
+// ---------- boot ----------
 async function loadData(){
-  try{
-    const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),9000);
-    const res=await fetch('/api/tle',{signal:ctrl.signal}); clearTimeout(to);
-    if(res.ok){const j=await res.json(); if(Array.isArray(j)&&j.length>20)return {data:j,live:true};}
+  try{const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),9000);
+    const res=await fetch('/api/tle',{signal:ctrl.signal});clearTimeout(to);
+    if(res.ok){const j=await res.json();if(Array.isArray(j)&&j.length>20)return {data:j,live:true};}
   }catch(e){}
-  return {data:window.SPACE_OBJECTS||[], live:false}; // 오프라인/실패 시 스냅샷
+  return {data:window.SPACE_OBJECTS||[],live:false};
 }
-loadData().then(({data})=>{
-  buildObjects(data);
-  const ld=document.getElementById('loading');
-  if(N>0){ld.style.display='none'; document.getElementById('start').classList.remove('hide');}
-  else{ld.innerHTML='<span style="color:#ff4d5e">궤도 데이터 로드 실패</span>';}
+document.getElementById('begin').addEventListener('click',async()=>{
+  document.getElementById('intro').classList.add('hide');
+  const {data,live}=await loadData();
+  buildCatalog(data); initMySat(); buildMyVisuals();
+  launchMs=Date.now(); tOffset=0; updateOrbitLines(curMs());
+  propagateCatalog(new Date(curMs())); renderCatalog(-1);
+  toast(live?'실시간 TLE 로드 — 스크리닝 시작':'스냅샷 데이터 로드 — 스크리닝 시작');
+  CONJ=await screenConjunctions(MY); renderConjList();
+  if(CONJ.length&&CONJ[0].miss<5) toast('⚠ 임계 접근 '+CONJ.filter(c=>c.miss<5).length+'건 — 회피 검토 필요');
 });
 requestAnimationFrame(frame);
 </script>
