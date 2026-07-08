@@ -38,7 +38,7 @@
 
   /* left telemetry */
   #tele{position:absolute;top:56px;left:14px;width:206px;background:var(--panel);border:1px solid var(--line);
-    border-radius:10px;padding:12px 13px;backdrop-filter:blur(8px);z-index:4}
+    border-radius:14px;padding:12px 13px;backdrop-filter:blur(8px);z-index:4}
   .th{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--dim);margin-bottom:9px}
   .row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:11.5px;padding:3px 0}
   .row .k{color:var(--dim)} .row .v{color:var(--ink)}
@@ -46,9 +46,9 @@
 
   /* right conjunctions */
   #conj{position:absolute;top:56px;right:14px;width:270px;max-height:calc(100% - 190px);overflow:auto;
-    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 12px 10px;backdrop-filter:blur(8px);z-index:4}
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;backdrop-filter:blur(8px);z-index:4}
   #conj::-webkit-scrollbar{width:6px} #conj::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
-  .cj{border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-top:8px;cursor:pointer;transition:.12s;background:rgba(255,255,255,.015)}
+  .cj{border:1px solid var(--line);border-radius:12px;padding:9px 10px;margin-top:8px;cursor:pointer;transition:.12s;background:rgba(255,255,255,.02)}
   .cj:hover{border-color:rgba(255,255,255,.2)}
   .cj.sel{border-color:var(--cyan);background:rgba(244,244,246,.07)}
   .cj.risk-hi{border-left:3px solid var(--red)} .cj.risk-md{border-left:3px solid var(--amber)} .cj.risk-lo{border-left:3px solid var(--go)}
@@ -57,29 +57,33 @@
   .cj .meta{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;display:flex;justify-content:space-between}
   .cj .miss{font-family:var(--mono);font-size:11px;margin-top:3px}
   .cj .miss b{font-size:13px}
+  /* DS Badge 컴포넌트 — 상태색 mono pill */
+  .tag{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .rk{font-family:var(--mono);font-size:9px;letter-spacing:.06em;padding:2px 8px;border-radius:999px;margin-left:3px;white-space:nowrap}
+  .rk.risk-hi{color:var(--red);background:rgba(224,101,95,.15)} .rk.risk-md{color:var(--amber);background:rgba(210,162,76,.15)} .rk.risk-lo{color:var(--go);background:rgba(85,182,133,.15)}
   .empty{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;padding:18px 0;line-height:1.6}
 
   /* bottom timeline */
   #timeline{position:absolute;bottom:14px;left:14px;right:14px;background:var(--panel);border:1px solid var(--line);
-    border-radius:10px;padding:11px 16px 13px;backdrop-filter:blur(8px);z-index:4}
+    border-radius:14px;padding:11px 16px 13px;backdrop-filter:blur(8px);z-index:4}
   .tl-head{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;margin-bottom:8px}
   .tl-head .now{color:var(--cyan)} .tl-head .off{color:var(--ink);margin-left:auto}
   .tl-wrap{position:relative}
   #scrub{width:100%;-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;outline:none;
     background:linear-gradient(90deg,#3a2a12 0%,#3a2a12 var(--nowpct,81%),#12283a var(--nowpct,81%),#12283a 100%)}
-  #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--cyan);
-    box-shadow:0 0 10px rgba(244,244,246,.6);cursor:grab}
-  #scrub::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px rgba(244,244,246,.6);cursor:grab}
+  #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--ink);
+    border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
+  #scrub::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
   .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:5px;letter-spacing:.05em}
   .tl-ctrl{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
   .chip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--dim);background:rgba(255,255,255,.04);
-    border:1px solid var(--line);border-radius:5px;padding:5px 9px}
+    border:1px solid var(--line);border-radius:999px;padding:5px 9px}
   .chip:hover{color:var(--ink);border-color:rgba(255,255,255,.2)}
   .chip.on{color:var(--cyan);border-color:var(--cyan);background:rgba(244,244,246,.1)}
 
   /* maneuver planner (opens from a conjunction) */
   #mnv{position:absolute;right:14px;bottom:14px;width:300px;background:var(--panel);border:1px solid rgba(242,169,59,.4);
-    border-radius:10px;padding:13px 14px;backdrop-filter:blur(10px);z-index:6;display:none;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+    border-radius:14px;padding:13px 14px;backdrop-filter:blur(10px);z-index:6;display:none;box-shadow:0 10px 40px rgba(0,0,0,.5)}
   #mnv.show{display:block}
   #mnv .mh{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--amber);margin-bottom:2px}
   #mnv .mt{font-family:var(--sans);font-weight:700;font-size:14px;margin-bottom:10px}
@@ -87,13 +91,13 @@
   .sl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:4px}
   .sl label b{color:var(--ink)}
   .sl input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.1);outline:none}
-  .sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--amber);cursor:grab}
-  .sl input[type=range]::-moz-range-thumb{width:13px;height:13px;border:none;border-radius:50%;background:var(--amber);cursor:grab}
+  .sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--amber);border:3px solid var(--void);box-shadow:0 0 0 1px rgba(210,162,76,.5);cursor:grab}
+  .sl input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--amber);border:3px solid var(--void);box-shadow:0 0 0 1px rgba(210,162,76,.5);cursor:grab}
   .mnv-out{font-family:var(--mono);font-size:11px;margin:11px 0 4px;padding:9px 10px;border-radius:7px;background:rgba(255,255,255,.03);line-height:1.7}
   .mnv-out .big{font-size:15px;font-weight:700}
   .mnv-btns{display:flex;gap:7px;margin-top:11px}
   .mbtn{flex:1;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--void);background:var(--amber);
-    border:none;border-radius:6px;padding:10px;font-weight:700}
+    border:none;border-radius:999px;padding:10px;font-weight:700}
   .mbtn.exec{background:var(--go)} .mbtn.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
   .mbtn:disabled{opacity:.4;cursor:not-allowed}
 
@@ -116,7 +120,7 @@
   .isub{color:var(--dim);font-size:13.5px;line-height:1.65;max-width:52ch;margin:0 auto 22px}
   .isub b{color:var(--ink);font-weight:600}
   .go{font-family:var(--mono);font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--void);
-    background:var(--cyan);border:none;border-radius:6px;padding:14px 36px;font-weight:700;box-shadow:0 0 26px rgba(244,244,246,.3)}
+    background:var(--cyan);border:none;border-radius:999px;padding:14px 36px;font-weight:700;box-shadow:0 0 26px rgba(244,244,246,.3)}
   .go:hover{background:#5cebdc}
   .toast{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:9;font-family:var(--mono);font-size:12px;
     padding:9px 16px;border-radius:8px;background:rgba(9,15,24,.92);border:1px solid var(--line);opacity:0;transition:.25s;pointer-events:none;max-width:80vw;text-align:center}
@@ -466,8 +470,8 @@ function renderConjList(){
   el.innerHTML=CONJ.map((c,i)=>`
     <div class="cj ${riskClass(c.miss)} ${selConj===i?'sel':''}" data-i="${i}">
       <div class="nm"><span class="dot" style="background:#${(TYPECOL[c.obj.kind]||TYPECOL.debris).toString(16).padStart(6,'0')}"></span>${c.obj.name}</div>
-      <div class="miss">최근접 <b>${c.miss<1?(c.miss*1000).toFixed(0)+' m':c.miss.toFixed(2)+' km'}</b> · 위험 ${riskLabel(c.miss)}</div>
-      <div class="meta"><span>TCA T+${fmtT(c.tca)}</span><span>${c.obj.type.toUpperCase()}</span></div>
+      <div class="miss">최근접 <b>${c.miss<1?(c.miss*1000).toFixed(0)+' m':c.miss.toFixed(2)+' km'}</b> <span class="rk ${riskClass(c.miss)}">위험 ${riskLabel(c.miss)}</span></div>
+      <div class="meta"><span>TCA T+${fmtT(c.tca)}</span><span class="tag">${c.obj.type.toUpperCase()}</span></div>
     </div>`).join('');
   el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
 }
