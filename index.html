@@ -551,16 +551,17 @@ function renderConjList(){
     </div>`).join('');
   el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
 }
-function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.42; camPhi=0.05; camTheta=0; // 물체 머리 위에서 수직으로 지구 내려다봄
+function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.42;
   document.getElementById('mySatCard').classList.remove('sel');
   document.getElementById('viewAll').classList.remove('on');
   renderConjList(); const c=CONJ[i];
   showObjDetail(c);
   // jump time near TCA and open maneuver planner (우측 상세 하단)
   setOffset(c.tca-900); openManeuver(c);
+  setTopDownAngles(); // 초기 시점: 물체 머리 위에서 지구 내려다봄 (이후 드래그는 none과 동일 조작감)
 }
 // 내 위성(디폴트) 상세로 복귀
-function selectMySat(){ selConj=null; focusMode='my'; camDist=R3*0.5; camPhi=0.05; camTheta=0; // 내 위성 머리 위에서 수직 top-down
+function selectMySat(){ selConj=null; focusMode='my'; camDist=R3*0.5; setTopDownAngles(); // 초기 top-down, 드래그는 none과 동일 조작감
   document.getElementById('detailObj').style.display='none';
   document.getElementById('detailMnv').style.display='none';
   document.getElementById('detailMy').style.display='block';
@@ -711,23 +712,17 @@ function focusRenderPos(){
   return new THREE.Vector3(0,0,0); // none → 지구 중심
 }
 function updateCamera(){
+  // 모든 모드 동일한 월드 오빗(none과 조작감 통일). target만 다름(지구중심/내위성/물체)
   camTarget.lerp(focusRenderPos(),0.12);
-  if(focusMode==='obj'||focusMode==='my'){
-    // 선택 대상 머리 위(지구 반대편)에서 수직으로 지구를 내려다봄. 대상 이동 시 궤도 따라 계속 추적.
-    const radialOut=camTarget.clone(); if(radialOut.lengthSq()<1e-6)radialOut.set(0,1,0); radialOut.normalize();
-    const worldUp=Math.abs(radialOut.y)>0.98?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
-    const tA=new THREE.Vector3().crossVectors(worldUp,radialOut).normalize();
-    const tB=new THREE.Vector3().crossVectors(radialOut,tA).normalize();
-    const tilt=Math.min(1.4,Math.max(0.0,camPhi));  // 0=완전 수직 top-down, 드래그로 기울임
-    const az=camTheta;
-    const dir=radialOut.clone().multiplyScalar(Math.cos(tilt))
-      .add(tA.clone().multiplyScalar(Math.sin(tilt)*Math.cos(az)))
-      .add(tB.clone().multiplyScalar(Math.sin(tilt)*Math.sin(az)));
-    camera.position.copy(camTarget).add(dir.multiplyScalar(camDist)); camera.lookAt(camTarget);
-    return;
-  }
   const x=camDist*Math.sin(camPhi)*Math.cos(camTheta), y=camDist*Math.cos(camPhi), z=camDist*Math.sin(camPhi)*Math.sin(camTheta);
   camera.position.set(camTarget.x+x,camTarget.y+y,camTarget.z+z); camera.lookAt(camTarget);
+}
+// 선택 시 초기 각도를 대상의 radial-out(지구 반대편) 방향으로 → 처음엔 지구를 수직으로 내려다봄
+function setTopDownAngles(){
+  const P=focusRenderPos(); if(P.lengthSq()<1e-6){camPhi=0.6;camTheta=0.6;return;}
+  const r=P.clone().normalize();
+  camPhi=Math.acos(Math.max(-1,Math.min(1,r.y)));
+  camTheta=(Math.hypot(r.x,r.z)>1e-4)?Math.atan2(r.z,r.x):0;
 }
 let downX2=0,downY2=0,moved=false;
 const raycaster=new THREE.Raycaster();
