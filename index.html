@@ -36,18 +36,20 @@
   #live i{width:6px;height:6px;border-radius:50%;background:var(--go);box-shadow:0 0 8px var(--go);animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.35}}
 
-  /* left telemetry */
-  #tele{position:absolute;top:56px;left:14px;width:206px;background:var(--panel);border:1px solid var(--line);
-    border-radius:14px;padding:12px 13px;backdrop-filter:blur(8px);z-index:4}
+  /* right — selected-object / my-sat detail (master-detail) */
+  #detail{position:absolute;top:56px;right:14px;width:304px;max-height:calc(100% - 90px);overflow:auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:13px 14px;backdrop-filter:blur(8px);z-index:4}
+  .dhelp{font-family:var(--mono);font-size:10px;color:var(--faint);line-height:1.7;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .cj.asset{background:rgba(255,255,255,.04)} .cj.asset.sel{border-color:var(--ink);background:rgba(244,244,246,.09)}
   .th{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--dim);margin-bottom:9px}
   .row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:11.5px;padding:3px 0}
   .row .k{color:var(--dim)} .row .v{color:var(--ink)}
   .sat-name{font-family:var(--sans);font-weight:700;font-size:13px;margin:-2px 0 8px}
 
-  /* right conjunctions */
-  #conj{position:absolute;top:56px;right:14px;width:270px;max-height:calc(100% - 190px);overflow:auto;
+  /* left — conjunction screening list (+ my asset) */
+  #left{position:absolute;top:56px;left:14px;width:292px;max-height:calc(100% - 190px);overflow:auto;
     background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;backdrop-filter:blur(8px);z-index:4}
-  #conj::-webkit-scrollbar{width:6px} #conj::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+  #left::-webkit-scrollbar,#detail::-webkit-scrollbar{width:6px} #left::-webkit-scrollbar-thumb,#detail::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
   .cj{border:1px solid var(--line);border-radius:12px;padding:9px 10px;margin-top:8px;cursor:pointer;transition:.12s;background:rgba(255,255,255,.02)}
   .cj:hover{border-color:rgba(255,255,255,.2)}
   .cj.sel{border-color:var(--cyan);background:rgba(244,244,246,.07)}
@@ -80,12 +82,8 @@
   .chip:hover{color:var(--ink);border-color:rgba(255,255,255,.2)}
   .chip.on{color:var(--cyan);border-color:var(--cyan);background:rgba(244,244,246,.1)}
 
-  /* maneuver planner (opens from a conjunction) */
-  #mnv{position:absolute;right:14px;bottom:14px;width:300px;background:var(--panel);border:1px solid rgba(242,169,59,.4);
-    border-radius:14px;padding:13px 14px;backdrop-filter:blur(10px);z-index:6;display:none;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-  #mnv.show{display:block}
-  #mnv .mh{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--amber);margin-bottom:2px}
-  #mnv .mt{font-family:var(--sans);font-weight:700;font-size:14px;margin-bottom:10px}
+  /* maneuver section (inside detail panel, shown when an object is selected) */
+  .mh{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--amber);margin:16px 0 9px;padding-top:14px;border-top:1px solid var(--line)}
   .sl{margin:9px 0}
   .sl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:4px}
   .sl label b{color:var(--ink)}
@@ -134,20 +132,58 @@
     <div class="epoch"><span id="liveBadge"></span> &nbsp; <span id="epochTxt">—</span></div>
   </div>
 
-  <div id="tele">
-    <div class="th">MY SATELLITE</div>
-    <div class="sat-name" id="satName">GUARDIAN-1</div>
-    <div class="row"><span class="k">ALT</span><span class="v" id="tAlt">—</span></div>
-    <div class="row"><span class="k">인클리네이션</span><span class="v" id="tInc">—</span></div>
-    <div class="row"><span class="k">주기</span><span class="v" id="tPer">—</span></div>
-    <div class="row"><span class="k">속도</span><span class="v" id="tVel">—</span></div>
-    <div class="row"><span class="k">추적 물체</span><span class="v" id="tCat">—</span></div>
-    <div class="row"><span class="k">Δv 예산</span><span class="v" id="tFuel">—</span></div>
+  <!-- LEFT: my asset + conjunction screening list -->
+  <div id="left">
+    <div class="th">MY ASSET</div>
+    <div id="mySatCard" class="cj asset sel">
+      <div class="nm"><span class="dot" style="background:var(--ink)"></span>GUARDIAN-1</div>
+      <div class="meta"><span>내 위성 · 관제 대상</span><span class="tag">PAYLOAD</span></div>
+    </div>
+    <div class="th" style="margin-top:15px">CONJUNCTION SCREENING · 향후 7일</div>
+    <div id="conjList"><div class="empty">스크리닝 대기…</div></div>
   </div>
 
-  <div id="conj">
-    <div class="th">CONJUNCTION SCREENING · 향후 7일</div>
-    <div id="conjList"><div class="empty">스크리닝 대기…</div></div>
+  <!-- RIGHT: detail of current selection (default = my sat; object select → object detail + maneuver) -->
+  <div id="detail">
+    <div id="detailMy">
+      <div class="th">MY SATELLITE · 상세</div>
+      <div class="sat-name" id="satName">GUARDIAN-1</div>
+      <div class="row"><span class="k">ALT</span><span class="v" id="tAlt">—</span></div>
+      <div class="row"><span class="k">인클리네이션</span><span class="v" id="tInc">—</span></div>
+      <div class="row"><span class="k">주기</span><span class="v" id="tPer">—</span></div>
+      <div class="row"><span class="k">속도</span><span class="v" id="tVel">—</span></div>
+      <div class="row"><span class="k">추적 물체</span><span class="v" id="tCat">—</span></div>
+      <div class="row"><span class="k">Δv 예산</span><span class="v" id="tFuel">—</span></div>
+      <div class="dhelp">← 좌측 충돌 리스트에서 우주물체를 선택하면<br>해당 물체 상세와 회피 기동 컨트롤이 여기 표시됩니다.</div>
+    </div>
+
+    <div id="detailObj" style="display:none">
+      <div class="th">SELECTED OBJECT · 상세</div>
+      <div class="sat-name" id="objName">—</div>
+      <div id="objRows"></div>
+      <div class="mh">AVOIDANCE MANEUVER PLANNING</div>
+      <div class="sl">
+        <label>실행 시점 (TCA 이전)<b id="mnvTb">12.0 h</b></label>
+        <input type="range" id="mTb" min="1" max="72" value="12" step="0.5">
+      </div>
+      <div class="sl">
+        <label>프로그레이드 Δv<b id="mvP">0.00 m/s</b></label>
+        <input type="range" id="mP" min="-3" max="3" value="0" step="0.02">
+      </div>
+      <div class="sl">
+        <label>레이디얼 Δv<b id="mvR">0.00 m/s</b></label>
+        <input type="range" id="mR" min="-3" max="3" value="0" step="0.02">
+      </div>
+      <div class="sl">
+        <label>노멀(면외) Δv<b id="mvN">0.00 m/s</b></label>
+        <input type="range" id="mN" min="-3" max="3" value="0" step="0.02">
+      </div>
+      <div class="mnv-out" id="mnvOut">기동을 조정하면 재스크리닝 결과가 표시됩니다.</div>
+      <div class="mnv-btns">
+        <button class="mbtn ghost" id="mnvClose">선택 해제</button>
+        <button class="mbtn exec" id="mnvExec" disabled>기동 실행</button>
+      </div>
+    </div>
   </div>
 
   <div id="timeline">
@@ -171,31 +207,6 @@
     </div>
   </div>
 
-  <div id="mnv">
-    <div class="mh">AVOIDANCE MANEUVER PLANNING</div>
-    <div class="mt" id="mnvTitle">회피 기동 계획</div>
-    <div class="sl">
-      <label>실행 시점 (TCA 이전)<b id="mnvTb">12.0 h</b></label>
-      <input type="range" id="mTb" min="1" max="72" value="12" step="0.5">
-    </div>
-    <div class="sl">
-      <label>프로그레이드 Δv<b id="mvP">0.00 m/s</b></label>
-      <input type="range" id="mP" min="-3" max="3" value="0" step="0.02">
-    </div>
-    <div class="sl">
-      <label>레이디얼 Δv<b id="mvR">0.00 m/s</b></label>
-      <input type="range" id="mR" min="-3" max="3" value="0" step="0.02">
-    </div>
-    <div class="sl">
-      <label>노멀(면외) Δv<b id="mvN">0.00 m/s</b></label>
-      <input type="range" id="mN" min="-3" max="3" value="0" step="0.02">
-    </div>
-    <div class="mnv-out" id="mnvOut">기동을 조정하면 재스크리닝 결과가 표시됩니다.</div>
-    <div class="mnv-btns">
-      <button class="mbtn ghost" id="mnvClose">닫기</button>
-      <button class="mbtn exec" id="mnvExec" disabled>기동 실행</button>
-    </div>
-  </div>
 
   <div id="screen" class="hide"><div class="spin"></div><span id="screenTxt">CONJUNCTION SCREENING…</span></div>
   <div class="toast" id="toast"></div>
@@ -474,21 +485,49 @@ function renderConjList(){
     </div>`).join('');
   el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
 }
-function selectConj(i){ selConj=i; renderConjList(); const c=CONJ[i];
-  // jump time near TCA and open maneuver planner
-  setOffset(c.tca- 900); openManeuver(c);
+function selectConj(i){ selConj=i;
+  document.getElementById('mySatCard').classList.remove('sel');
+  renderConjList(); const c=CONJ[i];
+  showObjDetail(c);
+  // jump time near TCA and open maneuver planner (우측 상세 하단)
+  setOffset(c.tca-900); openManeuver(c);
+}
+// 내 위성(디폴트) 상세로 복귀
+function selectMySat(){ selConj=null;
+  document.getElementById('detailObj').style.display='none';
+  document.getElementById('detailMy').style.display='block';
+  document.getElementById('mySatCard').classList.add('sel');
+  PLAN=null; if(planLine)planLine.visible=false;
+  renderConjList();
+}
+// 선택된 우주물체 상세 렌더(우측)
+function showObjDetail(c){
+  document.getElementById('detailMy').style.display='none';
+  document.getElementById('detailObj').style.display='block';
+  document.getElementById('objName').textContent=c.obj.name;
+  const rc=riskClass(c.miss), rl=riskLabel(c.miss);
+  const missStr=c.miss<1?(c.miss*1000).toFixed(0)+' m':c.miss.toFixed(2)+' km';
+  const typeLabel={debris:'파편 (DEBRIS)',payload:'위성 (PAYLOAD)',rocketbody:'로켓 본체 (R/B)',unknown:'미확인 (UNKNOWN)'}[c.obj.kind]||(c.obj.type||'').toUpperCase();
+  const ms=launchMs+c.tca*1000; let relv='—';
+  try{ const pv=satellite.propagate(c.obj.rec,new Date(ms)); const my=myStateAt(ms);
+    if(pv&&pv.velocity) relv=Math.hypot(pv.velocity.x-my.v[0],pv.velocity.y-my.v[1],pv.velocity.z-my.v[2]).toFixed(2)+' km/s'; }catch(e){}
+  document.getElementById('objRows').innerHTML=
+    `<div class="row"><span class="k">분류</span><span class="v">${typeLabel}</span></div>`+
+    `<div class="row"><span class="k">고도</span><span class="v">${(c.obj.alt||0).toFixed(0)} km</span></div>`+
+    `<div class="row"><span class="k">최근접 (TCA)</span><span class="v">${missStr}</span></div>`+
+    `<div class="row"><span class="k">TCA</span><span class="v">T+${fmtT(c.tca)}</span></div>`+
+    `<div class="row"><span class="k">상대 속도</span><span class="v">${relv}</span></div>`+
+    `<div class="row"><span class="k">위험도</span><span class="v"><span class="rk ${rc}">위험 ${rl}</span></span></div>`;
 }
 
 // ---------- maneuver planner ----------
 function openManeuver(c){
-  const m=document.getElementById('mnv'); m.classList.add('show');
-  document.getElementById('mnvTitle').textContent=c.obj.name+' 회피';
   const maxTb=Math.max(1,Math.min(72,c.tca/3600-0.2));
   const tb=document.getElementById('mTb'); tb.max=maxTb.toFixed(1); tb.value=Math.min(12,maxTb).toFixed(1);
   document.getElementById('mP').value=0;document.getElementById('mR').value=0;document.getElementById('mN').value=0;
   updateManeuver();
 }
-function closeManeuver(){ document.getElementById('mnv').classList.remove('show'); planLine.visible=false; PLAN=null; }
+function closeManeuver(){ selectMySat(); }
 function currentPlanFrom(c){
   const tbH=+document.getElementById('mTb').value; const burnMs=launchMs+(c.tca-tbH*3600)*1000;
   const st=myStateAtSrc(MY,burnMs); // state at burn
@@ -536,7 +575,7 @@ function execManeuver(){
   PLAN=null; closeManeuver();
   toast(`기동 실행 · Δv ${plan.dv.toFixed(0)} m/s 소모. 새 CDM 수신 중…`);
   // re-screen with the committed orbit → show updated risk
-  setTimeout(async()=>{ CONJ=await screenConjunctions(MY); selConj=null; renderConjList();
+  setTimeout(async()=>{ CONJ=await screenConjunctions(MY); selectMySat();
     toast('재스크리닝 완료 — 갱신된 접근 목록 확인');
   },500);
 }
@@ -616,7 +655,8 @@ function setOffset(s){ tOffset=Math.min(FUTURE,Math.max(-PAST,s)); document.getE
 document.getElementById('scrub').addEventListener('input',e=>{playing=false;document.getElementById('playBtn').classList.remove('on');document.getElementById('playBtn').textContent='▶ 재생';setOffset(+e.target.value);});
 document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.addEventListener('click',()=>{playing=false;setOffset(+c.dataset.jump);}));
 document.getElementById('playBtn').addEventListener('click',e=>{playing=!playing;playRate=600;e.target.classList.toggle('on',playing);e.target.textContent=playing?'⏸ 정지':'▶ 재생';});
-document.getElementById('rescreenBtn').addEventListener('click',async()=>{CONJ=await screenConjunctions(MY);selConj=null;renderConjList();toast('스크리닝 완료 — '+CONJ.length+'건 접근 탐지');});
+document.getElementById('rescreenBtn').addEventListener('click',async()=>{CONJ=await screenConjunctions(MY);selectMySat();toast('스크리닝 완료 — '+CONJ.length+'건 접근 탐지');});
+document.getElementById('mySatCard').addEventListener('click',selectMySat);
 ['mTb','mP','mR','mN'].forEach(id=>document.getElementById(id).addEventListener('input',updateManeuver));
 document.getElementById('mnvClose').addEventListener('click',closeManeuver);
 document.getElementById('mnvExec').addEventListener('click',execManeuver);
