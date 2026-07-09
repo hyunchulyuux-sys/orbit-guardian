@@ -321,11 +321,11 @@ function typeGeo(k){
     return mergeGeos([body,noz]);
   }
   if(k==='unknown'){ return new THREE.IcosahedronGeometry(0.32,1); } // 측지구
-  // debris: 돌 3덩어리가 간격 두고 가까이 뭉친 형태(캡틴 참조 이미지)
-  const chunks=[{p:[0.24,0.05,0.02],s:0.19},{p:[-0.21,-0.09,0.11],s:0.15},{p:[0.03,0.21,-0.09],s:0.13}];
+  // debris: 둥근 돌덩이 3개가 모여 있는 형태(구 기반, 살짝 울퉁불퉁)
+  const chunks=[{p:[0.24,0.05,0.02],s:0.20},{p:[-0.20,-0.08,0.10],s:0.16},{p:[0.02,0.20,-0.08],s:0.14}];
   const geos=chunks.map(ch=>{
-    const g=new THREE.IcosahedronGeometry(ch.s,0); const pos=g.attributes.position;
-    for(let i=0;i<pos.count;i++){const f=0.72+Math.random()*0.5; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);}
+    const g=new THREE.SphereGeometry(ch.s,14,12); const pos=g.attributes.position;
+    for(let i=0;i<pos.count;i++){const f=0.9+Math.random()*0.2; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);}
     g.computeVertexNormals(); g.translate(ch.p[0],ch.p[1],ch.p[2]); return g;
   });
   return mergeGeos(geos);
@@ -339,7 +339,8 @@ function buildCatalog(data){
   CAT.forEach((o,i)=>{o.i=i; (byKind[o.kind]||byKind.debris).push(i);});
   for(const k of ['debris','payload','rocketbody','unknown']){
     const ids=byKind[k]; if(!ids.length)continue;
-    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[k],emissive:new THREE.Color(TYPECOL[k]).multiplyScalar(0.25),roughness:.45,metalness:.45,flatShading:true}); // 저폴리 각면(캡틴 모델 결)
+    const isDeb=(k==='debris');
+    const mat=new THREE.MeshStandardMaterial({color:TYPECOL[k],emissive:new THREE.Color(TYPECOL[k]).multiplyScalar(0.22),roughness:isDeb?.9:.45,metalness:isDeb?.1:.45,flatShading:!isDeb}); // 데브리=둥근 돌(스무스), 그외=저폴리 각면
     const im=new THREE.InstancedMesh(typeGeo(k),mat,ids.length); im.frustumCulled=false;
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instByType[k]={mesh:im,ids}; scene.add(im);
@@ -541,7 +542,7 @@ function renderConjList(){
     </div>`).join('');
   el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
 }
-function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.42; camPhi=0.55; camTheta=0.6; // 물체 머리 위(약간 기울인 top-down)에서 지구 내려다봄
+function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.42; camPhi=0.05; camTheta=0; // 물체 머리 위에서 수직으로 지구 내려다봄
   document.getElementById('mySatCard').classList.remove('sel');
   document.getElementById('viewAll').classList.remove('on');
   renderConjList(); const c=CONJ[i];
@@ -550,7 +551,7 @@ function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.42; camPhi=0.55
   setOffset(c.tca-900); openManeuver(c);
 }
 // 내 위성(디폴트) 상세로 복귀
-function selectMySat(){ selConj=null; focusMode='my'; camDist=R3*0.32; // 내 위성으로 줌인
+function selectMySat(){ selConj=null; focusMode='my'; camDist=R3*0.5; camPhi=0.05; camTheta=0; // 내 위성 머리 위에서 수직 top-down
   document.getElementById('detailObj').style.display='none';
   document.getElementById('detailMnv').style.display='none';
   document.getElementById('detailMy').style.display='block';
@@ -570,6 +571,22 @@ function selectNone(){ selConj=null; focusMode='none'; camDist=R3*3.4;
   PLAN=null; if(planLine)planLine.visible=false;
   if(orbitLine)updateOrbitLines(curMs());
   renderConjList();
+}
+// 임의 물체 1개를 내 위성과 스크리닝(클릭 선택용) → CONJ 엔트리 생성
+function screenOne(o){
+  const t0=launchMs; let best={d:1e9,t:0};
+  for(let ts=0;ts<=FUTURE;ts+=30){ const ms=t0+ts*1000; let pv; try{pv=satellite.propagate(o.rec,new Date(ms));}catch(e){continue;} if(!pv||!pv.position)continue;
+    const my=myStateAtSrc(MY,ms); const d=Math.hypot(pv.position.x-my.r[0],pv.position.y-my.r[1],pv.position.z-my.r[2]); if(d<best.d)best={d,t:ts}; }
+  let ref={d:best.d,t:best.t};
+  for(let ts=Math.max(0,best.t-150);ts<=Math.min(FUTURE,best.t+150);ts+=0.5){ const ms=t0+ts*1000; let pv; try{pv=satellite.propagate(o.rec,new Date(ms));}catch(e){continue;} if(!pv||!pv.position)continue;
+    const my=myStateAtSrc(MY,ms); const d=Math.hypot(pv.position.x-my.r[0],pv.position.y-my.r[1],pv.position.z-my.r[2]); if(d<ref.d)ref={d,t:ts}; }
+  return {obj:o, miss:ref.d, tca:ref.t};
+}
+// 3D에서 클릭한 물체 선택(리스트에 없으면 즉석 스크리닝해서 추가)
+function selectObjectByCatIndex(catI){
+  let idx=CONJ.findIndex(c=>c.obj.i===catI);
+  if(idx<0){ const entry=screenOne(CAT[catI]); if(!entry)return; CONJ.push(entry); renderConjList(); idx=CONJ.length-1; }
+  selectConj(idx);
 }
 // 선택된 우주물체 상세 렌더(우측)
 function showObjDetail(c){
@@ -684,13 +701,13 @@ function focusRenderPos(){
 }
 function updateCamera(){
   camTarget.lerp(focusRenderPos(),0.12);
-  if(focusMode==='obj'){
-    // 물체 머리 위(지구 반대편)에서 물체를 사이에 두고 지구를 내려다봄. 물체 이동 시 계속 추적.
+  if(focusMode==='obj'||focusMode==='my'){
+    // 선택 대상 머리 위(지구 반대편)에서 수직으로 지구를 내려다봄. 대상 이동 시 궤도 따라 계속 추적.
     const radialOut=camTarget.clone(); if(radialOut.lengthSq()<1e-6)radialOut.set(0,1,0); radialOut.normalize();
     const worldUp=Math.abs(radialOut.y)>0.98?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
     const tA=new THREE.Vector3().crossVectors(worldUp,radialOut).normalize();
     const tB=new THREE.Vector3().crossVectors(radialOut,tA).normalize();
-    const tilt=Math.min(1.35,Math.max(0.05,camPhi));  // 0=수직 top-down, 드래그로 기울임
+    const tilt=Math.min(1.4,Math.max(0.0,camPhi));  // 0=완전 수직 top-down, 드래그로 기울임
     const az=camTheta;
     const dir=radialOut.clone().multiplyScalar(Math.cos(tilt))
       .add(tA.clone().multiplyScalar(Math.sin(tilt)*Math.cos(az)))
@@ -701,9 +718,21 @@ function updateCamera(){
   const x=camDist*Math.sin(camPhi)*Math.cos(camTheta), y=camDist*Math.cos(camPhi), z=camDist*Math.sin(camPhi)*Math.sin(camTheta);
   camera.position.set(camTarget.x+x,camTarget.y+y,camTarget.z+z); camera.lookAt(camTarget);
 }
-renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
-addEventListener('pointerup',()=>dragging=false);
-addEventListener('pointermove',e=>{if(!dragging)return;camTheta+=(e.clientX-lastX)*0.005;camPhi=Math.max(0.05,Math.min(3.05,camPhi+(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
+let downX2=0,downY2=0,moved=false;
+const raycaster=new THREE.Raycaster();
+function pickAt(cx,cy){
+  const rect=renderer.domElement.getBoundingClientRect();
+  const ndc=new THREE.Vector2(((cx-rect.left)/rect.width)*2-1, -((cy-rect.top)/rect.height)*2+1);
+  raycaster.setFromCamera(ndc,camera);
+  if(mySat){ const hm=raycaster.intersectObject(mySat,true); if(hm.length){ selectMySat(); return; } }
+  let best=null,bestDist=1e9;
+  for(const t in instByType){ const mesh=instByType[t].mesh; const hits=raycaster.intersectObject(mesh);
+    if(hits.length&&hits[0].distance<bestDist){ bestDist=hits[0].distance; best={t,iid:hits[0].instanceId}; } }
+  if(best!=null){ selectObjectByCatIndex(instByType[best.t].ids[best.iid]); }
+}
+renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;downX2=e.clientX;downY2=e.clientY;moved=false;});
+addEventListener('pointerup',e=>{ if(dragging&&!moved) pickAt(e.clientX,e.clientY); dragging=false; });
+addEventListener('pointermove',e=>{if(!dragging)return;if(Math.abs(e.clientX-downX2)+Math.abs(e.clientY-downY2)>6)moved=true;camTheta+=(e.clientX-lastX)*0.005;camPhi=Math.max(0.0,Math.min(3.1,camPhi+(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
 renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math.max(2.0,Math.min(R3*9,camDist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false}); // 더 가까이 줌인(최소 2.0)
 
 // ---------- render loop ----------
