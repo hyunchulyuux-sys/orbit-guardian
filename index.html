@@ -74,11 +74,13 @@
   .tl-head{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:12px;margin-bottom:8px}
   .tl-head .now{color:var(--cyan)} .tl-head .off{color:var(--ink);margin-left:auto}
   .tl-wrap{position:relative}
-  #scrub{width:100%;-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;outline:none;
-    background:linear-gradient(90deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.05) var(--nowpct,81%),rgba(255,255,255,.15) var(--nowpct,81%),rgba(255,255,255,.15) 100%)}
-  #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--ink);
-    border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
-  #scrub::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
+  /* shuttle/jog — 중앙 핸들을 좌우로 밀면 시간이 흐름(멀수록 빠르게) */
+  .jog{position:relative;height:24px;touch-action:none}
+  .jog-rail{position:absolute;top:50%;left:0;right:0;height:6px;transform:translateY(-50%);border-radius:999px;background:rgba(255,255,255,.08)}
+  .jog-center{position:absolute;top:50%;left:50%;width:2px;height:15px;transform:translate(-50%,-50%);background:rgba(255,255,255,.4);border-radius:1px}
+  .jog-handle{position:absolute;top:50%;left:50%;width:38px;height:20px;transform:translate(-50%,-50%);border-radius:999px;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab;transition:left .18s ease-out}
+  .jog-handle:active{cursor:grabbing;transition:none}
+  .jog-hint{color:var(--faint);letter-spacing:.02em}
   .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em}
   .tl-ctrl{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
   .chip{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--dim);background:rgba(255,255,255,.04);
@@ -202,8 +204,12 @@
       <span class="off" id="offTxt">T + 0.0 h</span>
     </div>
     <div class="tl-wrap">
-      <input type="range" id="scrub" min="-2592000" max="604800" value="0" step="60">
-      <div class="ticks"><span>−30d (past)</span><span class="now" style="position:absolute;left:81%;transform:translateX(-50%)">▲ NOW</span><span>+7d (forecast)</span></div>
+      <div id="jog" class="jog">
+        <div class="jog-rail"></div>
+        <div class="jog-center"></div>
+        <div class="jog-handle" id="jogHandle"></div>
+      </div>
+      <div class="ticks"><span>◀ PAST</span><span class="jog-hint">drag handle to shuttle time · farther = faster</span><span>FUTURE ▶</span></div>
     </div>
     <div class="tl-ctrl">
       <button class="chip" data-jump="-2592000">−30d</button>
@@ -744,7 +750,8 @@ renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math
 let last=performance.now(), catAcc=0, catDate=null;
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
-  if(playing){ tOffset=Math.min(FUTURE,Math.max(-PAST, tOffset+dt*playRate)); document.getElementById('scrub').value=tOffset; }
+  if(playing){ tOffset=Math.min(FUTURE,Math.max(-PAST, tOffset+dt*playRate)); }
+  if(jogActive){ tOffset=Math.min(FUTURE,Math.max(-PAST, tOffset+jogVel*dt)); }
   const nowMs=curMs();
   // throttle SGP4 catalog (6 Hz)
   catAcc+=dt;
@@ -774,10 +781,19 @@ function frame(now){
 }
 
 // ---------- UI wiring ----------
-function setOffset(s){ tOffset=Math.min(FUTURE,Math.max(-PAST,s)); document.getElementById('scrub').value=tOffset;
+function setOffset(s){ tOffset=Math.min(FUTURE,Math.max(-PAST,s));
   document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.classList.toggle('on',+c.dataset.jump===Math.round(tOffset)));
   updateOrbitLines(curMs()); }
-document.getElementById('scrub').addEventListener('input',e=>{playing=false;document.getElementById('playBtn').classList.remove('on');document.getElementById('playBtn').textContent='▶ Play';setOffset(+e.target.value);});
+// ── shuttle/jog: 중앙 핸들을 좌우로 밀면 그 변위에 비례해 시간이 흐름(f² · 최대 6h/s) ──
+let jogActive=false, jogVel=0, jogGrab=false;
+const jogEl=document.getElementById('jog'), jogHandle=document.getElementById('jogHandle');
+function jogUpdate(clientX){ const r=jogEl.getBoundingClientRect(); const half=r.width/2-19; const dx=Math.max(-half,Math.min(half,clientX-(r.left+r.width/2)));
+  jogHandle.style.left=(50+dx/r.width*100)+'%'; const f=half>0?dx/half:0; jogVel=Math.sign(f)*f*f*(6*3600); }
+jogHandle.addEventListener('pointerdown',e=>{ jogGrab=true; jogActive=true; playing=false;
+  document.getElementById('playBtn').classList.remove('on'); document.getElementById('playBtn').textContent='▶ Play';
+  document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.classList.remove('on')); e.preventDefault(); });
+addEventListener('pointermove',e=>{ if(jogGrab) jogUpdate(e.clientX); });
+addEventListener('pointerup',()=>{ if(jogGrab){ jogGrab=false; jogActive=false; jogVel=0; jogHandle.style.left='50%'; updateOrbitLines(curMs()); } });
 document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.addEventListener('click',()=>{playing=false;setOffset(+c.dataset.jump);}));
 document.getElementById('playBtn').addEventListener('click',e=>{playing=!playing;playRate=600;e.target.classList.toggle('on',playing);e.target.textContent=playing?'⏸ Pause':'▶ Play';});
 document.getElementById('rescreenBtn').addEventListener('click',async()=>{CONJ=await screenConjunctions(MY);selectMySat();toast('Screening complete — '+CONJ.length+' conjunctions detected');});
@@ -789,8 +805,6 @@ document.getElementById('mnvExec').addEventListener('click',execManeuver);
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 let _tt; function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),3200);}
 
-// nowpct for scrub gradient (0 offset position)
-(function(){const pct=(PAST/(PAST+FUTURE))*100;document.getElementById('scrub').style.setProperty('--nowpct',pct+'%');})();
 
 // ---------- boot ----------
 async function loadData(){
