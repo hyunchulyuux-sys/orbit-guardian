@@ -36,18 +36,18 @@
   #live i{width:6px;height:6px;border-radius:50%;background:var(--go);box-shadow:0 0 8px var(--go);animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.35}}
 
-  /* right — selected-object / my-sat detail (master-detail) */
-  #detail{position:absolute;top:56px;right:14px;width:304px;max-height:calc(100% - 90px);overflow:auto;background:var(--panel);border:1px solid var(--line);
-    border-radius:14px;padding:13px 14px;backdrop-filter:blur(8px);z-index:4}
-  .dhelp{font-family:var(--mono);font-size:10px;color:var(--faint);line-height:1.7;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  /* right — stacked detail panels (master-detail). 각 카드는 별도 패널. */
+  #detail{position:absolute;top:56px;right:14px;bottom:140px;width:304px;overflow:auto;display:flex;flex-direction:column;gap:12px;z-index:4}
+  .dpanel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 14px;backdrop-filter:blur(8px)}
+  .mnv-panel{border-color:rgba(210,162,76,.35)}
   .cj.asset{background:rgba(255,255,255,.04)} .cj.asset.sel{border-color:var(--ink);background:rgba(244,244,246,.09)}
-  .th{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--dim);margin-bottom:9px}
+  .th{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--dim);margin-bottom:9px}
   .row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:11.5px;padding:3px 0}
   .row .k{color:var(--dim)} .row .v{color:var(--ink)}
   .sat-name{font-family:var(--sans);font-weight:700;font-size:13px;margin:-2px 0 8px}
 
   /* left — conjunction screening list (+ my asset) */
-  #left{position:absolute;top:56px;left:14px;width:292px;max-height:calc(100% - 190px);overflow:auto;
+  #left{position:absolute;top:56px;left:14px;width:292px;bottom:140px;overflow:auto;
     background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;backdrop-filter:blur(8px);z-index:4}
   #left::-webkit-scrollbar,#detail::-webkit-scrollbar{width:6px} #left::-webkit-scrollbar-thumb,#detail::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
   .cj{border:1px solid var(--line);border-radius:12px;padding:9px 10px;margin-top:8px;cursor:pointer;transition:.12s;background:rgba(255,255,255,.02)}
@@ -55,12 +55,12 @@
   .cj.sel{border-color:var(--cyan);background:rgba(244,244,246,.07)}
   .cj .nm{font-family:var(--sans);font-weight:600;font-size:12px;display:flex;align-items:center;gap:6px}
   .cj .nm .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
-  .cj .meta{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;display:flex;justify-content:space-between}
+  .cj .meta{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:5px;display:flex;justify-content:space-between;align-items:center}
   .cj .miss{font-family:var(--mono);font-size:11px;margin-top:3px}
   .cj .miss b{font-size:13px}
   /* DS Badge 컴포넌트 — 상태색 mono pill */
-  .tag{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
-  .rk{font-family:var(--mono);font-size:9px;letter-spacing:.06em;padding:2px 8px;border-radius:999px;margin-left:3px;white-space:nowrap}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .rk{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:2px 8px;border-radius:999px;margin-left:3px;white-space:nowrap}
   .rk.risk-hi{color:var(--red);background:rgba(224,101,95,.15)} .rk.risk-md{color:var(--amber);background:rgba(210,162,76,.15)} .rk.risk-lo{color:var(--go);background:rgba(85,182,133,.15)}
   .empty{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;padding:18px 0;line-height:1.6}
 
@@ -75,15 +75,16 @@
   #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--ink);
     border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
   #scrub::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--ink);border:3px solid var(--void);box-shadow:0 0 0 1px var(--line);cursor:grab}
-  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:5px;letter-spacing:.05em}
+  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:5px;letter-spacing:.04em}
   .tl-ctrl{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
-  .chip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--dim);background:rgba(255,255,255,.04);
+  .chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--dim);background:rgba(255,255,255,.04);
     border:1px solid var(--line);border-radius:999px;padding:5px 9px}
   .chip:hover{color:var(--ink);border-color:rgba(255,255,255,.2)}
   .chip.on{color:var(--cyan);border-color:var(--cyan);background:rgba(244,244,246,.1)}
 
   /* maneuver section (inside detail panel, shown when an object is selected) */
-  .mh{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--amber);margin:16px 0 9px;padding-top:14px;border-top:1px solid var(--line)}
+  .mh{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--amber);margin:0 0 4px}
+  .mh-sub{font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:11px}
   .sl{margin:9px 0}
   .sl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:4px}
   .sl label b{color:var(--ink)}
@@ -145,8 +146,8 @@
 
   <!-- RIGHT: detail of current selection (default = my sat; object select → object detail + maneuver) -->
   <div id="detail">
-    <div id="detailMy">
-      <div class="th">MY SATELLITE · 상세</div>
+    <div id="detailMy" class="dpanel">
+      <div class="th">MY SATELLITE</div>
       <div class="sat-name" id="satName">GUARDIAN-1</div>
       <div class="row"><span class="k">ALT</span><span class="v" id="tAlt">—</span></div>
       <div class="row"><span class="k">인클리네이션</span><span class="v" id="tInc">—</span></div>
@@ -154,14 +155,17 @@
       <div class="row"><span class="k">속도</span><span class="v" id="tVel">—</span></div>
       <div class="row"><span class="k">추적 물체</span><span class="v" id="tCat">—</span></div>
       <div class="row"><span class="k">Δv 예산</span><span class="v" id="tFuel">—</span></div>
-      <div class="dhelp">← 좌측 충돌 리스트에서 우주물체를 선택하면<br>해당 물체 상세와 회피 기동 컨트롤이 여기 표시됩니다.</div>
     </div>
 
-    <div id="detailObj" style="display:none">
-      <div class="th">SELECTED OBJECT · 상세</div>
+    <div id="detailObj" class="dpanel" style="display:none">
+      <div class="th">SELECTED OBJECT</div>
       <div class="sat-name" id="objName">—</div>
       <div id="objRows"></div>
-      <div class="mh">AVOIDANCE MANEUVER PLANNING</div>
+    </div>
+
+    <div id="detailMnv" class="dpanel mnv-panel" style="display:none">
+      <div class="mh">AVOIDANCE MANEUVER</div>
+      <div class="mh-sub">GUARDIAN-1 (내 위성) 궤도를 조정합니다</div>
       <div class="sl">
         <label>실행 시점 (TCA 이전)<b id="mnvTb">12.0 h</b></label>
         <input type="range" id="mTb" min="1" max="72" value="12" step="0.5">
@@ -178,7 +182,7 @@
         <label>노멀(면외) Δv<b id="mvN">0.00 m/s</b></label>
         <input type="range" id="mN" min="-3" max="3" value="0" step="0.02">
       </div>
-      <div class="mnv-out" id="mnvOut">기동을 조정하면 재스크리닝 결과가 표시됩니다.</div>
+      <div class="mnv-out" id="mnvOut">—</div>
       <div class="mnv-btns">
         <button class="mbtn ghost" id="mnvClose">선택 해제</button>
         <button class="mbtn exec" id="mnvExec" disabled>기동 실행</button>
@@ -495,6 +499,7 @@ function selectConj(i){ selConj=i;
 // 내 위성(디폴트) 상세로 복귀
 function selectMySat(){ selConj=null;
   document.getElementById('detailObj').style.display='none';
+  document.getElementById('detailMnv').style.display='none';
   document.getElementById('detailMy').style.display='block';
   document.getElementById('mySatCard').classList.add('sel');
   PLAN=null; if(planLine)planLine.visible=false;
@@ -504,6 +509,7 @@ function selectMySat(){ selConj=null;
 function showObjDetail(c){
   document.getElementById('detailMy').style.display='none';
   document.getElementById('detailObj').style.display='block';
+  document.getElementById('detailMnv').style.display='block';
   document.getElementById('objName').textContent=c.obj.name;
   const rc=riskClass(c.miss), rl=riskLabel(c.miss);
   const missStr=c.miss<1?(c.miss*1000).toFixed(0)+' m':c.miss.toFixed(2)+' km';
