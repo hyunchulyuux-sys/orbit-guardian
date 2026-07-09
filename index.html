@@ -41,6 +41,8 @@
   .dpanel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 14px;backdrop-filter:blur(8px)}
   .mnv-panel{border-color:rgba(210,162,76,.35)}
   .cj.asset{background:rgba(255,255,255,.04)} .cj.asset.sel{border-color:var(--ink);background:rgba(244,244,246,.09)}
+  .viewall{width:100%;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--dim);background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:999px;padding:8px;margin-bottom:12px;cursor:pointer}
+  .viewall:hover{color:var(--ink);border-color:rgba(255,255,255,.22)} .viewall.on{color:var(--ink);border-color:var(--ink);background:rgba(244,244,246,.08)}
   .th{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--dim);margin-bottom:9px}
   .row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:11.5px;padding:3px 0}
   .row .k{color:var(--dim)} .row .v{color:var(--ink)}
@@ -135,6 +137,7 @@
 
   <!-- LEFT: my asset + conjunction screening list -->
   <div id="left">
+    <button id="viewAll" class="viewall">🌐 전체 지구 보기 · 선택 해제</button>
     <div class="th">MY ASSET</div>
     <div id="mySatCard" class="cj asset sel">
       <div class="nm"><span class="dot" style="background:var(--ink)"></span>GUARDIAN-1</div>
@@ -512,19 +515,31 @@ function renderConjList(){
     </div>`).join('');
   el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
 }
-function selectConj(i){ selConj=i;
+function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.34; // 선택 물체로 줌인
   document.getElementById('mySatCard').classList.remove('sel');
+  document.getElementById('viewAll').classList.remove('on');
   renderConjList(); const c=CONJ[i];
   showObjDetail(c);
   // jump time near TCA and open maneuver planner (우측 상세 하단)
   setOffset(c.tca-900); openManeuver(c);
 }
 // 내 위성(디폴트) 상세로 복귀
-function selectMySat(){ selConj=null;
+function selectMySat(){ selConj=null; focusMode='my'; camDist=R3*0.32; // 내 위성으로 줌인
   document.getElementById('detailObj').style.display='none';
   document.getElementById('detailMnv').style.display='none';
   document.getElementById('detailMy').style.display='block';
   document.getElementById('mySatCard').classList.add('sel');
+  document.getElementById('viewAll').classList.remove('on');
+  PLAN=null; if(planLine)planLine.visible=false;
+  renderConjList();
+}
+// 아무것도 선택 안 함 → 전체 지구 관망
+function selectNone(){ selConj=null; focusMode='none'; camDist=R3*3.4;
+  document.getElementById('detailMy').style.display='none';
+  document.getElementById('detailObj').style.display='none';
+  document.getElementById('detailMnv').style.display='none';
+  document.getElementById('mySatCard').classList.remove('sel');
+  document.getElementById('viewAll').classList.add('on');
   PLAN=null; if(planLine)planLine.visible=false;
   renderConjList();
 }
@@ -632,19 +647,22 @@ function updateTele(nowMs){
 }
 
 // ---------- camera ----------
-let camDist=R3*3.2, camTheta=0.6, camPhi=1.0, dragging=false, lastX,lastY, follow=true;
+let camDist=R3*2.2, camTheta=0.6, camPhi=1.0, dragging=false, lastX,lastY, focusMode='my'; // 'none'=전체지구 | 'my' | 'obj'
 const camTarget=new THREE.Vector3();
+function focusRenderPos(){
+  if(focusMode==='my'&&MY){ const st=myStateAt(curMs()); return toRender(st.r[0],st.r[1],st.r[2]); }
+  if(focusMode==='obj'&&selConj!==null&&CONJ[selConj]&&CONJ[selConj].obj.ok){ const o=CONJ[selConj].obj; return toRender(o.r.x,o.r.y,o.r.z); }
+  return new THREE.Vector3(0,0,0); // none → 지구 중심
+}
 function updateCamera(){
-  let tgt=new THREE.Vector3(0,0,0);
-  if(follow&&MY){ const st=myStateAt(curMs()); tgt=toRender(st.r[0],st.r[1],st.r[2]); }
-  camTarget.lerp(tgt,0.12);
+  camTarget.lerp(focusRenderPos(),0.12);
   const x=camDist*Math.sin(camPhi)*Math.cos(camTheta), y=camDist*Math.cos(camPhi), z=camDist*Math.sin(camPhi)*Math.sin(camTheta);
   camera.position.set(camTarget.x+x,camTarget.y+y,camTarget.z+z); camera.lookAt(camTarget);
 }
 renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
 addEventListener('pointerup',()=>dragging=false);
 addEventListener('pointermove',e=>{if(!dragging)return;camTheta-=(e.clientX-lastX)*0.005;camPhi=Math.max(0.15,Math.min(3.0,camPhi-(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
-renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math.max(R3*1.4,Math.min(R3*9,camDist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math.max(2.0,Math.min(R3*9,camDist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false}); // 더 가까이 줌인(최소 2.0)
 
 // ---------- render loop ----------
 let last=performance.now(), catAcc=0, catDate=null;
@@ -688,6 +706,7 @@ document.querySelectorAll('.tl-ctrl .chip[data-jump]').forEach(c=>c.addEventList
 document.getElementById('playBtn').addEventListener('click',e=>{playing=!playing;playRate=600;e.target.classList.toggle('on',playing);e.target.textContent=playing?'⏸ 정지':'▶ 재생';});
 document.getElementById('rescreenBtn').addEventListener('click',async()=>{CONJ=await screenConjunctions(MY);selectMySat();toast('스크리닝 완료 — '+CONJ.length+'건 접근 탐지');});
 document.getElementById('mySatCard').addEventListener('click',selectMySat);
+document.getElementById('viewAll').addEventListener('click',selectNone);
 ['mTb','mP','mR','mN'].forEach(id=>document.getElementById(id).addEventListener('input',updateManeuver));
 document.getElementById('mnvClose').addEventListener('click',closeManeuver);
 document.getElementById('mnvExec').addEventListener('click',execManeuver);
