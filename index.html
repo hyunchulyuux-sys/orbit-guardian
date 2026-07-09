@@ -352,14 +352,16 @@ function propagateCatalog(date){
   }catch(e){o.ok=false;} }
 }
 function renderCatalog(highlightIdx){
+  const focusOnly=(focusMode==='obj'&&highlightIdx>=0); // 물체 선택 시 나머지 숨김
   for(const t in instByType){ const {mesh,ids}=instByType[t];
     for(let k=0;k<ids.length;k++){ const o=CAT[ids[k]];
-      if(!o.ok){_d.position.set(0,-1e5,0);_d.scale.setScalar(.0001);}
+      if(!o.ok||(focusOnly&&o.i!==highlightIdx)){_d.position.set(0,-1e5,0);_d.scale.setScalar(.0001);}
       else{const v=toRender(o.r.x,o.r.y,o.r.z);_d.position.copy(v);
-        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?3.6:1);
+        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?(focusOnly?2.4:3.6):1);
         _d.rotation.set(o.i*0.7,o.i*1.3,0);}
       _d.updateMatrix(); mesh.setMatrixAt(k,_d.matrix);
-      mesh.setColorAt(k,new THREE.Color(o.i===highlightIdx?0xff4d5e:TYPECOL[t]));
+      // 포커스 모드에선 물체 본연의 타입색(데브리 모델 잘 보이게), 리스트 모드 선택은 빨강 강조
+      mesh.setColorAt(k,new THREE.Color((o.i===highlightIdx&&!focusOnly)?0xff4d5e:TYPECOL[t]));
     }
     mesh.instanceMatrix.needsUpdate=true; if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
   }
@@ -420,7 +422,7 @@ function makeSat(){ const g=new THREE.Group();
   b.rotation.z=Math.PI/2; g.add(b);
   const p=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.9,0.32),new THREE.MeshStandardMaterial({color:0x2a5266,emissive:0x0d3540,emissiveIntensity:.7,roughness:.4,metalness:.5})); g.add(p);
   return g; }
-let selMarker=null, selLine=null;
+let selMarker=null, selLine=null, objOrbitLine=null, caMarker=null;
 function reticleTex(){ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
   x.strokeStyle='#ff4d5e'; x.lineWidth=7; x.beginPath(); x.arc(64,64,42,0,7); x.stroke();
   x.lineWidth=6; for(const a of [0,90,180,270]){const r=a*Math.PI/180; x.beginPath(); x.moveTo(64+Math.cos(r)*40,64+Math.sin(r)*40); x.lineTo(64+Math.cos(r)*60,64+Math.sin(r)*60); x.stroke();}
@@ -432,6 +434,17 @@ function buildMyVisuals(){
   planLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x41e08a,transparent:true,opacity:.7})); planLine.visible=false; scene.add(planLine);
   selMarker=new THREE.Sprite(new THREE.SpriteMaterial({map:reticleTex(),transparent:true,depthTest:false,depthWrite:false})); selMarker.visible=false; selMarker.renderOrder=999; scene.add(selMarker);
   selLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedMaterial({color:0xff4d5e,transparent:true,opacity:.55,dashSize:0.6,gapSize:0.4,depthTest:false})); selLine.visible=false; selLine.renderOrder=998; scene.add(selLine);
+  // 선택 물체의 예상 궤도(청록) + 최근접/충돌 지점 마커
+  objOrbitLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x2fc4e6,transparent:true,opacity:.6})); objOrbitLine.visible=false; scene.add(objOrbitLine);
+  caMarker=new THREE.Mesh(new THREE.SphereGeometry(0.35,16,16),new THREE.MeshBasicMaterial({color:0xff4d5e,transparent:true,opacity:.85})); caMarker.visible=false; scene.add(caMarker);
+}
+// SGP4 물체의 예상 궤도 1주기 샘플
+function sampleObjOrbit(o,ms0){
+  const per=2*Math.PI*Math.sqrt((o.a**3)/MU)*1000; // ms
+  const pts=[]; const n=128;
+  for(let k=0;k<=n;k++){ const ms=ms0-per/2+(k/n)*per; let pv; try{pv=satellite.propagate(o.rec,new Date(ms));}catch(e){continue;}
+    if(pv&&pv.position) pts.push(toRender(pv.position.x,pv.position.y,pv.position.z)); }
+  return pts;
 }
 function sampleOrbit(src,ms0){
   const a=(2/Math.hypot(...src.r0) - (src.v0[0]**2+src.v0[1]**2+src.v0[2]**2)/MU); const sma=1/a;
@@ -444,6 +457,19 @@ function sampleOrbit(src,ms0){
 function updateOrbitLines(nowMs){
   orbitLine.geometry.setFromPoints(sampleOrbit(MY,nowMs));
   if(PLAN){planLine.geometry.setFromPoints(sampleOrbit(PLAN,nowMs));planLine.visible=true;} else planLine.visible=false;
+  // 선택 물체: 예상 궤도 + 최근접/충돌 지점(회피값에 따라 실시간 반영)
+  if(focusMode==='obj'&&selConj!==null&&CONJ[selConj]){
+    const c=CONJ[selConj];
+    objOrbitLine.geometry.setFromPoints(sampleObjOrbit(c.obj,nowMs)); objOrbitLine.visible=true;
+    const tcaMs=launchMs+c.tca*1000;
+    let op=null; try{const pv=satellite.propagate(c.obj.rec,new Date(tcaMs)); if(pv&&pv.position)op=toRender(pv.position.x,pv.position.y,pv.position.z);}catch(e){}
+    const src=(PLAN&&PLAN.epoch<=tcaMs)?PLAN:MY; const st=myStateAtSrc(src,tcaMs); const mp=toRender(st.r[0],st.r[1],st.r[2]);
+    if(op){ caMarker.position.copy(op.clone().add(mp).multiplyScalar(0.5));
+      const missKm=Math.hypot(op.x-mp.x,op.y-mp.y,op.z-mp.z)/RENDER;
+      const col=missKm<1?0xff4d5e:missKm<5?0xd2a24c:0x55b685;
+      caMarker.material.color.set(col); caMarker.scale.setScalar(missKm<1?1.7:1.0); caMarker.visible=true;
+    } else caMarker.visible=false;
+  } else { objOrbitLine.visible=false; caMarker.visible=false; }
 }
 
 // ---------- time control ----------
@@ -531,6 +557,7 @@ function selectMySat(){ selConj=null; focusMode='my'; camDist=R3*0.32; // 내 �
   document.getElementById('mySatCard').classList.add('sel');
   document.getElementById('viewAll').classList.remove('on');
   PLAN=null; if(planLine)planLine.visible=false;
+  if(orbitLine)updateOrbitLines(curMs());
   renderConjList();
 }
 // 아무것도 선택 안 함 → 전체 지구 관망
@@ -541,6 +568,7 @@ function selectNone(){ selConj=null; focusMode='none'; camDist=R3*3.4;
   document.getElementById('mySatCard').classList.remove('sel');
   document.getElementById('viewAll').classList.add('on');
   PLAN=null; if(planLine)planLine.visible=false;
+  if(orbitLine)updateOrbitLines(curMs());
   renderConjList();
 }
 // 선택된 우주물체 상세 렌더(우측)
