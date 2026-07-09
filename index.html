@@ -732,7 +732,7 @@ function pickAt(cx,cy){
 }
 renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;downX2=e.clientX;downY2=e.clientY;moved=false;});
 addEventListener('pointerup',e=>{ if(dragging&&!moved) pickAt(e.clientX,e.clientY); dragging=false; });
-addEventListener('pointermove',e=>{if(!dragging)return;if(Math.abs(e.clientX-downX2)+Math.abs(e.clientY-downY2)>6)moved=true;camTheta+=(e.clientX-lastX)*0.005;camPhi=Math.max(0.0,Math.min(3.1,camPhi+(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointermove',e=>{if(!dragging)return;if(Math.abs(e.clientX-downX2)+Math.abs(e.clientY-downY2)>6)moved=true;camTheta+=(e.clientX-lastX)*0.005;camPhi=Math.max(0.0,Math.min(3.1,camPhi-(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
 renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math.max(2.0,Math.min(R3*9,camDist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false}); // 더 가까이 줌인(최소 2.0)
 
 // ---------- render loop ----------
