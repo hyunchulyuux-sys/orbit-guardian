@@ -515,7 +515,7 @@ function renderConjList(){
     </div>`).join('');
   el.querySelectorAll('.cj').forEach(d=>d.addEventListener('click',()=>selectConj(+d.dataset.i)));
 }
-function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.34; // 선택 물체로 줌인
+function selectConj(i){ selConj=i; focusMode='obj'; camDist=R3*0.42; camPhi=0.55; camTheta=0.6; // 물체 머리 위(약간 기울인 top-down)에서 지구 내려다봄
   document.getElementById('mySatCard').classList.remove('sel');
   document.getElementById('viewAll').classList.remove('on');
   renderConjList(); const c=CONJ[i];
@@ -656,12 +656,26 @@ function focusRenderPos(){
 }
 function updateCamera(){
   camTarget.lerp(focusRenderPos(),0.12);
+  if(focusMode==='obj'){
+    // 물체 머리 위(지구 반대편)에서 물체를 사이에 두고 지구를 내려다봄. 물체 이동 시 계속 추적.
+    const radialOut=camTarget.clone(); if(radialOut.lengthSq()<1e-6)radialOut.set(0,1,0); radialOut.normalize();
+    const worldUp=Math.abs(radialOut.y)>0.98?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
+    const tA=new THREE.Vector3().crossVectors(worldUp,radialOut).normalize();
+    const tB=new THREE.Vector3().crossVectors(radialOut,tA).normalize();
+    const tilt=Math.min(1.35,Math.max(0.05,camPhi));  // 0=수직 top-down, 드래그로 기울임
+    const az=camTheta;
+    const dir=radialOut.clone().multiplyScalar(Math.cos(tilt))
+      .add(tA.clone().multiplyScalar(Math.sin(tilt)*Math.cos(az)))
+      .add(tB.clone().multiplyScalar(Math.sin(tilt)*Math.sin(az)));
+    camera.position.copy(camTarget).add(dir.multiplyScalar(camDist)); camera.lookAt(camTarget);
+    return;
+  }
   const x=camDist*Math.sin(camPhi)*Math.cos(camTheta), y=camDist*Math.cos(camPhi), z=camDist*Math.sin(camPhi)*Math.sin(camTheta);
   camera.position.set(camTarget.x+x,camTarget.y+y,camTarget.z+z); camera.lookAt(camTarget);
 }
 renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
 addEventListener('pointerup',()=>dragging=false);
-addEventListener('pointermove',e=>{if(!dragging)return;camTheta-=(e.clientX-lastX)*0.005;camPhi=Math.max(0.15,Math.min(3.0,camPhi-(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointermove',e=>{if(!dragging)return;camTheta+=(e.clientX-lastX)*0.005;camPhi=Math.max(0.05,Math.min(3.05,camPhi+(e.clientY-lastY)*0.005));lastX=e.clientX;lastY=e.clientY;});
 renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDist=Math.max(2.0,Math.min(R3*9,camDist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false}); // 더 가까이 줌인(최소 2.0)
 
 // ---------- render loop ----------
