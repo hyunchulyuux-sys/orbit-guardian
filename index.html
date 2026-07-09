@@ -259,11 +259,29 @@ const grid=new THREE.Mesh(new THREE.SphereGeometry(R3*1.003,36,24),
   new THREE.MeshBasicMaterial({color:0x2a6f88,wireframe:true,transparent:true,opacity:0.06})); scene.add(grid);
 const atmo=new THREE.Mesh(new THREE.SphereGeometry(R3*1.03,48,48),
   new THREE.MeshBasicMaterial({color:0x49b8ee,transparent:true,opacity:0.14,side:THREE.BackSide})); scene.add(atmo);
-{ const N=1600,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
+// 배경 별 — fog 제외해서 먼 우주에 살짝 떠 보이게. 일반 별 + 밝은 별 소수 2레이어
+{ const N=2400,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
   for(let i=0;i<N;i++){const r=2600,u=Math.random()*2-1,t=Math.random()*6.283,s=Math.sqrt(1-u*u);
     p[i*3]=r*s*Math.cos(t);p[i*3+1]=r*u;p[i*3+2]=r*s*Math.sin(t);}
   g.setAttribute('position',new THREE.BufferAttribute(p,3));
-  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x9fb4c8,size:1.5,sizeAttenuation:false}))); }
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0xccd6e6,size:1.7,sizeAttenuation:false,fog:false,transparent:true,opacity:0.85})));
+  const N2=150,g2=new THREE.BufferGeometry(),p2=new Float32Array(N2*3);
+  for(let i=0;i<N2;i++){const r=2500,u=Math.random()*2-1,t=Math.random()*6.283,s=Math.sqrt(1-u*u);
+    p2[i*3]=r*s*Math.cos(t);p2[i*3+1]=r*u;p2[i*3+2]=r*s*Math.sin(t);}
+  g2.setAttribute('position',new THREE.BufferAttribute(p2,3));
+  scene.add(new THREE.Points(g2,new THREE.PointsMaterial({color:0xffffff,size:2.6,sizeAttenuation:false,fog:false,transparent:true,opacity:0.95}))); }
+// 실제 태양 — 글로우 스프라이트(위치는 frame 에서 실시간 태양 방향으로)
+function sunTex(){ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
+  const gr=x.createRadialGradient(64,64,0,64,64,64);
+  gr.addColorStop(0,'rgba(255,250,238,1)');gr.addColorStop(.22,'rgba(255,241,205,0.92)');gr.addColorStop(.5,'rgba(255,220,150,0.32)');gr.addColorStop(1,'rgba(255,210,140,0)');
+  x.fillStyle=gr; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(c); }
+const sunSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:sunTex(),transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending}));
+sunSprite.scale.setScalar(300); scene.add(sunSprite);
+function sunEci(date){ // 태양 ECI 단위벡터(저정밀 근사)
+  const jd=date.getTime()/86400000+2440587.5, n=jd-2451545.0;
+  const L=(280.460+0.9856474*n)*D2R, g=(357.528+0.9856003*n)*D2R;
+  const lam=L+(1.915*Math.sin(g)+0.020*Math.sin(2*g))*D2R, eps=23.439*D2R;
+  return [Math.cos(lam), Math.cos(eps)*Math.sin(lam), Math.sin(eps)*Math.sin(lam)]; }
 
 // eci(km) → render vector (z-up ECI → three y-up)
 function toRender(x,y,z){ return new THREE.Vector3(x*RENDER, z*RENDER, -y*RENDER); }
@@ -300,9 +318,14 @@ function typeGeo(k){
     return mergeGeos([body,noz]);
   }
   if(k==='unknown'){ return new THREE.IcosahedronGeometry(0.32,1); } // 측지구
-  // debris: 각진 저폴리 크리스탈 조각(캡틴 이미지처럼) — 완만한 불규칙 + 플랫셰이딩으로 각면
-  const g=new THREE.IcosahedronGeometry(0.32,0); const pos=g.attributes.position;
-  for(let i=0;i<pos.count;i++){const f=0.82+Math.random()*0.42; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);} g.computeVertexNormals(); return g;
+  // debris: 돌 3덩어리가 간격 두고 가까이 뭉친 형태(캡틴 참조 이미지)
+  const chunks=[{p:[0.24,0.05,0.02],s:0.19},{p:[-0.21,-0.09,0.11],s:0.15},{p:[0.03,0.21,-0.09],s:0.13}];
+  const geos=chunks.map(ch=>{
+    const g=new THREE.IcosahedronGeometry(ch.s,0); const pos=g.attributes.position;
+    for(let i=0;i<pos.count;i++){const f=0.72+Math.random()*0.5; pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f,pos.getZ(i)*f);}
+    g.computeVertexNormals(); g.translate(ch.p[0],ch.p[1],ch.p[2]); return g;
+  });
+  return mergeGeos(geos);
 }
 let CAT=[], instByType={};
 function buildCatalog(data){
@@ -650,6 +673,8 @@ function frame(now){
     } else { selMarker.visible=false; selLine.visible=false; }
   }
   const gmst=satellite.gstime(new Date(nowMs)); earth.rotation.y=gmst; grid.rotation.y=gmst;
+  const sd=sunEci(new Date(nowMs)); const sv=toRender(sd[0],sd[1],sd[2]).normalize();
+  sun.position.copy(sv).multiplyScalar(2000); sunSprite.position.copy(sv).multiplyScalar(2200);
   updateCamera(); updateTele(nowMs);
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
