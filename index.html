@@ -82,7 +82,7 @@
   .jog-handle:active{cursor:grabbing;transition:none}
   .jog-hint{color:var(--faint);letter-spacing:.02em}
   .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em}
-  .tl-ctrl{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .tl-ctrl{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;justify-content:center}
   .chip{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--dim);background:rgba(255,255,255,.04);
     border:1px solid var(--line);border-radius:999px;padding:5px 9px}
   .chip:hover{color:var(--ink);border-color:rgba(255,255,255,.2)}
@@ -367,7 +367,7 @@ function renderCatalog(highlightIdx){
     for(let k=0;k<ids.length;k++){ const o=CAT[ids[k]];
       if(!o.ok||(focusOnly&&o.i!==highlightIdx)){_d.position.set(0,-1e5,0);_d.scale.setScalar(.0001);}
       else{const v=toRender(o.r.x,o.r.y,o.r.z);_d.position.copy(v);
-        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?(focusOnly?2.4:3.6):1);
+        const hot=(o.i===highlightIdx); _d.scale.setScalar(hot?(focusOnly?1.5:2.4):0.6); // 전체적으로 더 작게
         _d.rotation.set(o.i*0.7,o.i*1.3,0);}
       _d.updateMatrix(); mesh.setMatrixAt(k,_d.matrix);
       // 포커스 모드에선 물체 본연의 타입색(데브리 모델 잘 보이게), 리스트 모드 선택은 빨강 강조
